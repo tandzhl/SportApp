@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-w5nbyi0=y$@927cb)cl90mfpq-tm!!fp7@n*q+8w9*o)s-sp&d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -37,8 +37,32 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'sports.apps.SportsConfig'
+    'sports.apps.SportsConfig',
+    'ckeditor',
+    'ckeditor_uploader',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'drf_yasg',
+    'oauth2_provider',
+    # 'django_celery_beat',
 ]
+
+CKEDITOR_UPLOAD_PATH = 'ckeditor/newsfeed/'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 20, # Đặt mặc định là 20 bình luận mỗi lần
+
+}
+
+MEDIA_ROOT = '%s/sports/static/' % BASE_DIR
+
+# CELERY_BROKER_URL = 'redis://localhost:6379/0'
+# CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -79,8 +103,12 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'sportdb',
         'USER': 'root',
-        'PASSWORD': 'Admin@123',
-        'HOST': '' # mặc định localhost
+        'PASSWORD': 'Abc@123',
+        'HOST': 'localhost',
+        'PORT': '3306',
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        }
     }
 }
 
