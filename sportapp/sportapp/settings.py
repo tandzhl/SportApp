@@ -15,6 +15,7 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+MEDIA_ROOT = f'{BASE_DIR}/sports/static/'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -37,8 +38,34 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'sports.apps.SportsConfig'
+    'sports.apps.SportsConfig',
+    'ckeditor',
+    'ckeditor_uploader',
+    'rest_framework',
+    'oauth2_provider',
+    'drf_yasg',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ( 'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
+}
+
+CLIENT_ID = 'ECLo4HoBDiJS7ivy1GxA1FyjpKuRmoXXISVCXYuG'
+CLIENT_SECRET = 'X1I2yJogVJmSMYsDtuGH9lVHDRkgQ7qpwa2iQFXrBgXmqvijli0d1INvIEg55391oIGFJnL4f4ckYZEF9WnQYnLAhwLlVm1qzlNTJ3zvxmMa4aUSyojs0r5wXhR2czbj'
+
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
+
+# Configuration
+cloudinary.config(
+    cloud_name = "ds4oggqzq",
+    api_key = "393726784763992",
+    api_secret = "hks4Bc8122s41z6vSN7jJdwuioI",
+    secure=True
+)
+
+CKEDITOR_UPLOAD_PATH = "uploads/sports"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
