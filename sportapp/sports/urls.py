@@ -13,7 +13,7 @@ router.register('schedules', ScheduleViewSet, basename='schedules')
 router.register('devices', DeviceViewSet, basename='devices')
 router.register('notifications', NotificationViewSet, basename='notifications')
 router.register('orders', OrdersViewSet, basename='orders')
-router.register('admin_stats', AdminStatsViewSet, basename='admin_stats')
+router.register('stats', AdminStatsViewSet, basename='stats')
 
 auth_patterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

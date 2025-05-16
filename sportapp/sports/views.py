@@ -4,11 +4,9 @@ import pytz
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
-from kombu.asynchronous.timer import scheduled
 from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.response import Response
 from sports import perms, serializers
 from sports.models import Device, User, Schedule, Discount, MemberJoinClass, Notification, NewFeed, Comment, Like, Order
@@ -109,7 +107,7 @@ class NewFeedViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
     queryset = NewFeed.objects.filter(active=True)
     serializer_class = serializers.NewFeedDetailSerializer
     pagination_class = LimitOffsetPagination
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def list(self, request):
         feeds = NewFeed.objects.filter(active=True).order_by('-created_at')
@@ -263,8 +261,7 @@ class AdminStatsViewSet(viewsets.ViewSet):
             raise ValidationError("Invalid period type")
         return start, end
 
-    @action(methods=['get'], detail=False, url_path='stats')
-    def get_stats(self, request):
+    def list(self, request):
         date_str = request.query_params.get('date', None)
         period= request.query_params.get('period', 'week')
         # Xác định ngày bắt đầu
