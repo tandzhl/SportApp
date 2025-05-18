@@ -17,7 +17,7 @@ class Payment(models.IntegerChoices):
     Banking = 3, 'Banking'
 
 class User(AbstractUser):
-    avatar = models.ImageField(upload_to='user/%Y/%m', blank=True, null=True)
+    avatar = CloudinaryField('image', null=True, blank=True)
     role = models.CharField(max_length=10, choices=UserRole.choices, default=UserRole.MEMBER)
     notification = models.ManyToManyField('Notification', blank=True)
 
@@ -36,10 +36,11 @@ class Category(BaseModel):
         return self.name
 
 class SportClass(BaseModel):
-    image = models.ImageField(upload_to='sportclass/%Y/%m', blank=True, null=True)
+    image = CloudinaryField(null=True);
     name = models.CharField(max_length=100)
     decription = RichTextField()
     coach = models.ForeignKey(User, on_delete=models.CASCADE)
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, null=True)
 
     def __str__(self):
         return self.name
@@ -83,7 +84,3 @@ class NewFeed(BaseModel):
 
     def __str__(self):
         return self.news
-
-class Coach_Category(BaseModel):
-    coach = models.ForeignKey(User, on_delete=models.CASCADE)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE)

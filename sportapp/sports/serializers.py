@@ -43,11 +43,12 @@ class SportClassSerializer(ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['image'] = instance.image.url if instance.image else ''
+        data['coach'] = UserSerializer(instance.coach).data
         return data
 
     class Meta:
         model = SportClass
-        fields = ['id', 'name', 'decription', 'coach', 'image']
+        fields = ['id', 'name', 'decription', 'coach', 'image', 'category_id']
 
 class ScheduleSerializer(ModelSerializer):
     sportclass = SportClassSerializer()

@@ -1,8 +1,7 @@
 from rest_framework import viewsets, permissions, generics, parsers, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
-from sports import perms
+from sports import perms, paginator
 
 from sports.models import Category, SportClass, MemberJoinClass, User, Schedule
 from sports.serializers import CategorySerializer, SportClassSerializer, ScheduleSerializer, JoinedStudentSerializer, UserSerializer, JoinedSportClassSerializer
@@ -14,6 +13,20 @@ class CategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
 class SportClassViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = SportClass.objects.filter(active=True)
     serializer_class = SportClassSerializer
+    pagination_class = paginator.Paginator
+
+    def get_queryset(self):
+        query = self.queryset
+
+        q = self.request.query_params.get('q')
+        if q:
+            query = query.filter(name__icontains=q)
+
+        cate_id = self.request.query_params.get('category_id')
+        if cate_id:
+            query = query.filter(category_id=cate_id)
+
+        return query
 
     @action(methods=['get'], url_path='schedules' ,detail=True, permission_classes=[permissions.AllowAny])
     def get_schedules(self, request, pk):
