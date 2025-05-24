@@ -40,6 +40,7 @@ class SportClass(BaseModel):
     name = models.CharField(max_length=100)
     decription = RichTextField()
     coach = models.ForeignKey(User, on_delete=models.CASCADE)
+    price = models.FloatField(null=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, null=True)
 
     def __str__(self):
@@ -48,6 +49,7 @@ class SportClass(BaseModel):
 class Schedule(BaseModel):
     datetime = models.DateTimeField()
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
+    place = models.CharField(max_length=100, null=True)
 
     def __str__(self):
         return self.datetime.strftime("%Y-%m-%d %H:%M")
