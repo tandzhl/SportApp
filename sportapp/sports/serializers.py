@@ -1,28 +1,24 @@
-from rest_framework import serializers
+from rest_framework.serializers import ModelSerializer, SerializerMethodField
+from sports.models import Category, SportClass, Schedule, User, MemberJoinClass, User
 
-from .models import Notification, Schedule, NewFeed, Device, Comment, Like, User, Order
-
-
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        data['avatar'] = instance.avatar.url if instance.avatar else ''
         return data
-
-    class Meta:
-        model = User
-        fields = ['username', 'password', 'first_name', 'last_name']
-        extra_kwargs = {
-            'password': {
-                'write_only': True
-            }
-        }
 
     def create(self, validated_data):
         data = validated_data.copy()
         u = User(**data)
         u.set_password(u.password)
         u.save()
+
         return u
+
+    class Meta:
+        model = User
+        fields = ['username', 'password', 'email', 'first_name', 'last_name', 'role', 'avatar']
+        extra_kwargs = {'password': {'write_only': True}}
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -30,20 +26,39 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['subject', 'message', 'created_at']
 
+class JoinedStudentSerializer(ModelSerializer):
+    user = UserSerializer()
+    class Meta:
+        model = MemberJoinClass
+        fields = ['user', 'joining_date']
+
 class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
         fields = ['token', 'device_type', 'active']
 
-class ScheduleSerializer(serializers.ModelSerializer):
+class JoinedSportClassSerializer(ModelSerializer):
     class Meta:
-        model = Schedule
-        fields = '__all__'
+        model = MemberJoinClass
+        fields = ['user', 'joining_date', 'sportclass']
 
-class OrderSerializer(serializers.ModelSerializer):
+class CategorySerializer(ModelSerializer):
     class Meta:
-        model = Order
-        fields = '__all__'
+        model = Category
+        fields = ['id', 'name']
+
+class SportClassSerializer(ModelSerializer):
+    coach = UserSerializer()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['image'] = instance.image.url if instance.image else ''
+        data['coach'] = UserSerializer(instance.coach).data
+        return data
+    class Meta:
+        model = SportClass
+        fields = ['id', 'name', 'created_at' ,'decription', 'coach', 'image', 'category_id', 'price']
+
 
 class CommentSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
@@ -94,3 +109,13 @@ class NewFeedCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context['request'].user
         return NewFeed.objects.create(created_by = user, **validated_data)
+
+class ScheduleSerializer(ModelSerializer):
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['sportclass'] = SportClassSerializer(instance.sportclass).data
+        return data
+
+    class Meta:
+        model = Schedule
+        fields = ['id', 'datetime', 'sportclass', 'place']

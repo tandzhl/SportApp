@@ -20,6 +20,12 @@ auth_patterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
 
+r = DefaultRouter()
+r.register('categories', views.CategoryViewSet)
+r.register('sportclasses', views.SportClassViewSet)
+r.register('users', views.UserViewSet)
+r.register('schedules', views.ScheduleViewSet)
+r.register('joined-sportclass', views.JoinedSportClassViewSet)
 urlpatterns = [
     path('auth/', include(auth_patterns)),
     path('', include(router.urls)),

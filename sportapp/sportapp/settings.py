@@ -15,6 +15,7 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+MEDIA_ROOT = f'{BASE_DIR}/sports/static/'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-w5nbyi0=y$@927cb)cl90mfpq-tm!!fp7@n*q+8w9*o)s-sp&d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['192.168.10.113', '127.0.0.1']
 
 
 # Application definition
@@ -65,6 +66,27 @@ MEDIA_ROOT = '%s/sports/static/' % BASE_DIR
 # CELERY_BROKER_URL = 'redis://localhost:6379/0'
 # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ( 'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
+}
+
+CLIENT_ID = 'ECLo4HoBDiJS7ivy1GxA1FyjpKuRmoXXISVCXYuG'
+CLIENT_SECRET = 'X1I2yJogVJmSMYsDtuGH9lVHDRkgQ7qpwa2iQFXrBgXmqvijli0d1INvIEg55391oIGFJnL4f4ckYZEF9WnQYnLAhwLlVm1qzlNTJ3zvxmMa4aUSyojs0r5wXhR2czbj'
+
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
+
+# Configuration
+cloudinary.config(
+    cloud_name = "ds4oggqzq",
+    api_key = "393726784763992",
+    api_secret = "hks4Bc8122s41z6vSN7jJdwuioI",
+    secure=True
+)
+
+CKEDITOR_UPLOAD_PATH = "uploads/sports"
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -76,7 +98,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = True  # Tạm thời, để phát triển. Sau này nên giới hạn lại.
 
 ROOT_URLCONF = 'sportapp.urls'
 

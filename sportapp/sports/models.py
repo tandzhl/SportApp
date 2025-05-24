@@ -1,14 +1,15 @@
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.db.models.fields import TextField
+from cloudinary.models import CloudinaryField
 from ckeditor.fields import RichTextField
 
 
-class UserRole(models.Choices):
-    Admin = 'admin'
-    Member = 'member'
-    Employee = 'employee'
+class UserRole(models.TextChoices):  # (✔ Sửa lại cho đúng chuẩn TextChoices)
+    ADMIN = 'admin', 'Admin'
+    MEMBER = 'member', 'Member'
+    COACH = 'coach', 'Coach'
+    EMPLOYEE = 'employee', 'Employee'
 
 class Payment(models.IntegerChoices):
     Cash_payment = 1, 'Cash'
@@ -16,7 +17,8 @@ class Payment(models.IntegerChoices):
     Banking = 3, 'Banking'
 
 class User(AbstractUser):
-    role = models.CharField(max_length=20,choices=UserRole,default=UserRole.Member)
+    avatar = CloudinaryField('image', null=True, blank=True)
+    role = models.CharField(max_length=10, choices=UserRole.choices, default=UserRole.MEMBER)
     notification = models.ManyToManyField('Notification', blank=True)
 
 class BaseModel(models.Model):
@@ -34,14 +36,23 @@ class Category(BaseModel):
         return self.name
 
 class SportClass(BaseModel):
-    name = models.CharField(max_length=100, unique=True) #unique
-    description = models.TextField() #
+    image = CloudinaryField(null=True);
+    name = models.CharField(max_length=100)
+    decription = RichTextField()
     coach = models.ForeignKey(User, on_delete=models.CASCADE)
+    price = models.FloatField(null=True)
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, null=True)
 
+    def __str__(self):
+        return self.name
 
 class Schedule(BaseModel):
     datetime = models.DateTimeField()
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
+    place = models.CharField(max_length=100, null=True)
+
+    def __str__(self):
+        return self.datetime.strftime("%Y-%m-%d %H:%M")
 
 class MemberJoinClass(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -53,7 +64,7 @@ class Order(BaseModel):
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
     price = models.FloatField(default=0.0) #dam bao khong am
     is_paid = models.BooleanField(default=False)
-    payment = models.IntegerField(choices=Payment, default=Payment.Cash_payment)
+    payment = models.IntegerField(choices=Payment.choices, default=Payment.Cash_payment)
 
 class Discount(BaseModel):
     name = models.CharField(max_length=100, unique=True) #unique
@@ -61,6 +72,9 @@ class Discount(BaseModel):
         validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
     )
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 
 class Notification(BaseModel):
     subject = models.CharField(max_length=100)
@@ -77,6 +91,9 @@ class NewsCategory(models.TextChoices):
     TRAINING_TIPS = 'training', 'Mẹo Luyện Tập'
     NUTRITION = 'nutrition', 'Chế Độ Dinh Dưỡng'
     EVENTS = 'events', 'Sự Kiện Thể Thao'
+
+    def __str__(self):
+        return self.subject
 
 class NewFeed(BaseModel):
     title = RichTextField()
@@ -111,5 +128,3 @@ class Like(Interaction):
         unique_together = ('news', 'user')
 
 
-class Coach(User):
-    category = models.ForeignKey(Category, on_delete=models.CASCADE)
