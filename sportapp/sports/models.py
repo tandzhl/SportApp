@@ -1,3 +1,4 @@
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.db.models.fields import TextField
@@ -38,7 +39,7 @@ class Category(BaseModel):
 class SportClass(BaseModel):
     image = CloudinaryField(null=True);
     name = models.CharField(max_length=100)
-    decription = RichTextField()
+    description = RichTextField()
     coach = models.ForeignKey(User, on_delete=models.CASCADE)
     price = models.FloatField(null=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, null=True)
@@ -64,7 +65,7 @@ class Order(BaseModel):
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
     price = models.FloatField(default=0.0) #dam bao khong am
     is_paid = models.BooleanField(default=False)
-    payment = models.IntegerField(choices=Payment.choices, default=Payment.Cash_payment)
+    payment = models.IntegerField(choices=Payment, default=Payment.Cash_payment)
 
 class Discount(BaseModel):
     name = models.CharField(max_length=100, unique=True) #unique
@@ -99,7 +100,7 @@ class NewFeed(BaseModel):
     title = RichTextField()
     content = models.TextField()
     category = models.CharField(max_length=20, choices=NewsCategory.choices, default=NewsCategory.TRAINING_TIPS)
-    image = models.ImageField(upload_to="news/%Y/%m", blank=True, null=True)
+    image = CloudinaryField(null=True, blank=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -126,5 +127,3 @@ class Comment(Interaction):
 class Like(Interaction):
     class Meta:
         unique_together = ('news', 'user')
-
-

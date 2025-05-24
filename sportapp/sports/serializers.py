@@ -1,5 +1,7 @@
+from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer, SerializerMethodField
-from sports.models import Category, SportClass, Schedule, User, MemberJoinClass, User
+from sports.models import *
+
 
 class UserSerializer(ModelSerializer):
     def to_representation(self, instance):
@@ -32,6 +34,7 @@ class JoinedStudentSerializer(ModelSerializer):
         model = MemberJoinClass
         fields = ['user', 'joining_date']
 
+
 class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
@@ -41,6 +44,7 @@ class JoinedSportClassSerializer(ModelSerializer):
     class Meta:
         model = MemberJoinClass
         fields = ['user', 'joining_date', 'sportclass']
+
 
 class CategorySerializer(ModelSerializer):
     class Meta:
@@ -57,7 +61,7 @@ class SportClassSerializer(ModelSerializer):
         return data
     class Meta:
         model = SportClass
-        fields = ['id', 'name', 'created_at' ,'decription', 'coach', 'image', 'category_id', 'price']
+        fields = ['id', 'name', 'created_at' ,'description', 'coach', 'image', 'category_id', 'price']
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -75,6 +79,7 @@ class CommentSerializer(serializers.ModelSerializer):
             }
         }
 
+
 class NewFeedSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -83,7 +88,8 @@ class NewFeedSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NewFeed
-        fields = ['id', 'title', 'created_by', 'created_at', 'image']
+        fields = ['id', 'title', 'created_by', 'created_at', 'image', 'category']
+
 
 class NewFeedDetailSerializer(NewFeedSerializer):
     liked = serializers.SerializerMethodField()
@@ -101,6 +107,7 @@ class NewFeedDetailSerializer(NewFeedSerializer):
         model = NewFeedSerializer.Meta.model
         fields = NewFeedSerializer.Meta.fields + ['content', 'liked', 'like_count']
 
+
 class NewFeedCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = NewFeed
@@ -108,7 +115,8 @@ class NewFeedCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context['request'].user
-        return NewFeed.objects.create(created_by = user, **validated_data)
+        return NewFeed.objects.create(created_by=user, **validated_data)
+
 
 class ScheduleSerializer(ModelSerializer):
     def to_representation(self, instance):
@@ -119,3 +127,6 @@ class ScheduleSerializer(ModelSerializer):
     class Meta:
         model = Schedule
         fields = ['id', 'datetime', 'sportclass', 'place']
+
+class OrderSerializer(ModelSerializer):
+    pass

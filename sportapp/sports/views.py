@@ -102,10 +102,17 @@ class NewFeedViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
     queryset = NewFeed.objects.filter(active=True)
     serializer_class = serializers.NewFeedDetailSerializer
     pagination_class = LimitOffsetPagination
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        feeds = NewFeed.objects.filter(active=True).order_by('-created_at')
+        feeds = NewFeed.objects.filter(active=True)
+        category = request.query_params.get('category')
+        if category:
+            feeds = feeds.filter(category=category)
+        search = request.query_params.get('search')
+        if search:
+            feeds = feeds.filter(Q(title__icontains=search)| Q(content__icontains=search))
+        feeds = feeds.order_by('-created_at')
         data = serializers.NewFeedSerializer(feeds, many=True, context={'request': request}).data
         return Response(data)
 
@@ -117,7 +124,7 @@ class NewFeedViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
     def create(self, request):
         s = serializers.NewFeedCreateSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
-        s.save(created_by = request.user)
+        s.save() #bỏ created_by = request.user
         return Response(s.data, status=status.HTTP_201_CREATED)
 
     @action(methods=['get', 'post'], detail=True, url_path='comments')
@@ -326,131 +333,6 @@ class AdminStatsViewSet(viewsets.ViewSet):
         })
 
 
-# GET /admin-stats/stats/?date=2025-05-01&period=month
-# GET /admin-stats/stats/?period=week
-#
-# #Đăng ký thiết bị
-# class RegisterDeviceView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         token = request.data.get('token')
-#         device_type = request.data.get('device_type')
-#         if token and device_type == 'android':
-#             Device.objects.update_or_create(
-#                 user=request.user,
-#                 defaults={'token': token, 'device_type': device_type, 'active': True}
-#             )
-#             return Response({"status": "device registered"})
-#         return Response({"error": "invalid data"}, status=status.HTTP_400_BAD_REQUEST)
-#
-# #Gửi thông báo thử
-# class SendTestNotificationView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         response = NotificationService.send_notification(
-#             users=[request.user],
-#             title="Test Notification",
-#             body="This is a test notification from GymApp"
-#         )
-#         return Response({"status": "notification sent", "response": response})
-#
-#
-# #Lấy danh sách thiết bị
-# class DeviceStatusView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def get(self, request):
-#         devices = Device.objects.filter(user=request.user, active=True)
-#         serializer = DeviceSerializer(devices, many=True)
-#         return Response({"status":"devices retrieved", "data":serializer.data}, status=status.HTTP_200_OK)
-#
-# #Gửi nhắc nhở lịch học
-# class SendScheduleReminderView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         print("Token người dùng:", request.auth)
-#         print("User:", request.user)
-#
-#         schedule_id = request.data.get('schedule_id')
-#         try:
-#             schedule = Schedule.objects.get(id=schedule_id)
-#         except Schedule.DoesNotExist:
-#             return Response({"error": "Schedule không tồn tại."}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).select_related('user')
-#         for member in members:
-#             NotificationService.send_schedule_reminder(member.user, schedule)
-#         return Response({"status": "reminder sent"}, status=status.HTTP_200_OK)
-#
-#
-# #Gửi thông báo khuyến mãi
-# class SendPromotionNotificationView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         print("User:", request.user)
-#         print("User Role:", getattr(request.user, 'role', None))
-#         if request.user.role != 'admin' and not request.user.is_superuser:
-#             return Response({"error": "Only admin can send promotions"}, status=status.HTTP_403_FORBIDDEN)
-#         discount_id = request.data.get('discount_id')
-#         try:
-#             discount = Discount.objects.get(id=discount_id)
-#         except Discount.DoesNotExist:
-#             return Response({"error": "Discount does not exist"}, status=status.HTTP_404_NOT_FOUND)
-#         members = User.objects.filter(role='member')
-#         response = NotificationService.send_promotion_notification(members, discount)
-#         return Response({"status": "promotion sent", "response": response})
-#
-# #Gửi thông báo hanfg loạt
-# class BulkSendPromotionView(APIView):
-#     permission_classes = [IsAuthenticated]
-#     def post(self, request):
-#         print("User:", request.user)
-#         print("User Role:", getattr(request.user, 'role', None))
-#
-#         if request.user.role != 'admin' and not request.user.is_superuser:
-#             return Response({"error": "Only admin can send bulk promotions"}, status=status.HTTP_403_FORBIDDEN)
-#         discount_ids = request.data.get('discount_ids', [])
-#         if not discount_ids:
-#             return Response({"error": "No discount ids"}, status=status.HTTP_400_BAD_REQUEST)
-#         members = User.objects.filter(role='member')
-#         for discount_id in discount_ids:
-#             try:
-#                 discount = Discount.objects.get(id=discount_id)
-#                 NotificationService.send_promotion_notification(members, discount)
-#             except Discount.DoesNotExist:
-#                 continue
-#         return Response({"status": "bulk promotion sent"}, status=status.HTTP_200_OK)
-#
-#
-# #Lấy lịch sử thông baso
-# class NotificationsHistoryView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def get(self, request):
-#         notifications = Notification.objects.filter(users=request.user).order_by('-created_at')[:10]
-#         serializer = NotificationSerializer(notifications, many=True)
-#         return Response({"status":"history retrieved", "data":serializer.data}, status=status.HTTP_200_OK)
-#
-# class NotifyMembersView(APIView):
-#     permission_classes = [IsAuthenticated, EmployeePermission]
-#
-#     def post(self, request, pk):
-#         try:
-#             schedule = Schedule.objects.get(pk=pk)
-#             members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
-#             notification = Notification.objects.create(
-#                 subject="Schedule Update",
-#                 message=f"Schedule for {schedule.sportclass.name} has been updated!",
-#                 users=members
-#             )
-#             serializer = NotificationSerializer(notification)
-#             return Response(serializer.data, status=status.HTTP_200_OK)
-#         except Schedule.DoesNotExist:
-#             return Response({"error": "Schedule does not exist"}, status=status.HTTP_404_NOT_FOUND)
 class SportClassViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = SportClass.objects.filter(active=True)
     serializer_class = SportClassSerializer
@@ -496,6 +378,11 @@ class JoinedSportClassViewSet(viewsets.ViewSet, generics.CreateAPIView):
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
+    # permission_classes = [perms.IsScheduleOwnedByCoach]
+
+    @action(detail=False, methods=['get'], url_path='current-user')
+    def get_current_user(self, request):
+        return Response(serializers.UserSerializer(request.user).data)
     parser_classes = [parsers.MultiPartParser]
 
     @action(methods=['get', 'patch'], url_path="current-user", detail=False,

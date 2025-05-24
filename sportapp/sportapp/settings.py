@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,8 +27,10 @@ SECRET_KEY = 'django-insecure-w5nbyi0=y$@927cb)cl90mfpq-tm!!fp7@n*q+8w9*o)s-sp&d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.10.113', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 # Application definition
 
@@ -53,25 +56,22 @@ CKEDITOR_UPLOAD_PATH = 'ckeditor/newsfeed/'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 2, # Đặt mặc định là 20 bình luận mỗi lần
 
 }
 
-MEDIA_ROOT = '%s/sports/static/' % BASE_DIR
+# MEDIA_ROOT = '%s/sports/static/' % BASE_DIR
 
 # CELERY_BROKER_URL = 'redis://localhost:6379/0'
 # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ( 'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
-}
 
-CLIENT_ID = 'ECLo4HoBDiJS7ivy1GxA1FyjpKuRmoXXISVCXYuG'
-CLIENT_SECRET = 'X1I2yJogVJmSMYsDtuGH9lVHDRkgQ7qpwa2iQFXrBgXmqvijli0d1INvIEg55391oIGFJnL4f4ckYZEF9WnQYnLAhwLlVm1qzlNTJ3zvxmMa4aUSyojs0r5wXhR2czbj'
+CLIENT_ID = 'BDRa0k4EDDOAIqiMIhJnomA9Ujo5vUXC0BZXdTGY'
+CLIENT_SECRET = 't1VC0eR2cqDO9iJ7WsjOLPkEFFhFwvFvgie4JsGvenRZoAcQoKNibKL4qGxqQvo9GbZwhSCALY0Yrm2k6fvHAJD6iJzshy3d7EnTYBQHdqAznGOijEpAI5VWXJGKEtU6'
 
 import cloudinary
 import cloudinary.uploader
