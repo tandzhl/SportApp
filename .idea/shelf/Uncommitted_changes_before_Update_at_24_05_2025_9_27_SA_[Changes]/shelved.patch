@@ -1,0 +1,375 @@
+Index: sportapp/sports/views.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from datetime import timedelta, date, datetime\r\n\r\nimport pytz\r\nfrom django.core.exceptions import ValidationError\r\nfrom django.db.models import Sum, Count, Q\r\nfrom django.utils import timezone\r\nfrom rest_framework.decorators import action\r\nfrom rest_framework.pagination import LimitOffsetPagination\r\nfrom rest_framework.permissions import IsAuthenticated\r\nfrom rest_framework.response import Response\r\nfrom sports import perms, serializers\r\nfrom sports.models import Device, User, Schedule, Discount, MemberJoinClass, Notification, NewFeed, Comment, Like, Order\r\nfrom sports.serializers import DeviceSerializer, NotificationSerializer, CommentSerializer, NewFeedSerializer, \\\r\n    NewFeedDetailSerializer, ScheduleSerializer, OrderSerializer, UserSerializer\r\nfrom sports.services.notification_service import NotificationService\r\nfrom rest_framework import status, viewsets, generics, permissions\r\n\r\n\r\nclass UserViewSet(viewsets.ViewSet):\r\n    queryset = User.objects.filter(is_active=True)\r\n    serializer_class = UserSerializer\r\n\r\nclass DeviceViewSet(viewsets.ViewSet):\r\n    permission_classes = [IsAuthenticated]\r\n\r\n    @action(detail=False, methods=['post'], url_path='register')\r\n    def register_device(self, request):\r\n        token = request.data.get('token')\r\n        device_type = request.data.get('device_type')\r\n        if token and device_type == 'android':\r\n            Device.objects.update_or_create(\r\n                user=request.user,\r\n                defaults={'token': token, 'device_type': device_type, 'active': True}\r\n            )\r\n            return Response({\"status\": \"device registered\"})\r\n        return Response({\"error\": \"invalid data\"}, status=status.HTTP_400_BAD_REQUEST)\r\n\r\n    @action(detail=False, methods=['get'], url_path='status')\r\n    def device_status(self, request):\r\n        devices = Device.objects.filter(user=request.user, active=True)\r\n        serializer = DeviceSerializer(devices, many=True)\r\n        return Response({\"status\": \"devices retrieved\", \"data\": serializer.data}, status=status.HTTP_200_OK)\r\n\r\n\r\nclass NotificationViewSet(viewsets.ViewSet):\r\n    permission_classes = [IsAuthenticated]\r\n\r\n    @action(detail=False, methods=['post'], url_path='test')\r\n    def send_test_notification(self, request):\r\n        response = NotificationService.send_notification(\r\n            users=[request.user],\r\n            title=\"Test Notification\",\r\n            body=\"This is a test notification from GymApp\"\r\n        )\r\n        return Response({\"status\": \"notification sent\", \"response\": response})\r\n\r\n    @action(detail=False, methods=['post'], url_path='schedule-reminder')\r\n    def send_schedule_reminder(self, request):\r\n        schedule_id = request.data.get('schedule_id')\r\n        try:\r\n            schedule = Schedule.objects.get(id=schedule_id)\r\n        except Schedule.DoesNotExist:\r\n            return Response({\"error\": \"Schedule không tồn tại.\"}, status=status.HTTP_400_BAD_REQUEST)\r\n\r\n        members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).select_related('user')\r\n        for member in members:\r\n            NotificationService.send_schedule_reminder(member.user, schedule)\r\n        return Response({\"status\": \"reminder sent\"}, status=status.HTTP_200_OK)\r\n\r\n    @action(detail=False, methods=['post'], url_path='promotion')\r\n    def send_promotion_notification(self, request):\r\n        if request.user.role != 'admin' and not request.user.is_superuser:\r\n            return Response({\"error\": \"Only admin can send promotions\"}, status=status.HTTP_403_FORBIDDEN)\r\n        discount_id = request.data.get('discount_id')\r\n        try:\r\n            discount = Discount.objects.get(id=discount_id)\r\n        except Discount.DoesNotExist:\r\n            return Response({\"error\": \"Discount does not exist\"}, status=status.HTTP_404_NOT_FOUND)\r\n        members = User.objects.filter(role='member')\r\n        response = NotificationService.send_promotion_notification(members, discount)\r\n        return Response({\"status\": \"promotion sent\", \"response\": response})\r\n\r\n    @action(detail=False, methods=['post'], url_path='bulk-promotion')\r\n    def bulk_send_promotion(self, request):\r\n        if request.user.role != 'admin' and not request.user.is_superuser:\r\n            return Response({\"error\": \"Only admin can send bulk promotions\"}, status=status.HTTP_403_FORBIDDEN)\r\n        discount_ids = request.data.get('discount_ids', [])\r\n        if not discount_ids:\r\n            return Response({\"error\": \"No discount ids\"}, status=status.HTTP_400_BAD_REQUEST)\r\n        members = User.objects.filter(role='member')\r\n        for discount_id in discount_ids:\r\n            try:\r\n                discount = Discount.objects.get(id=discount_id)\r\n                NotificationService.send_promotion_notification(members, discount)\r\n            except Discount.DoesNotExist:\r\n                continue\r\n        return Response({\"status\": \"bulk promotion sent\"}, status=status.HTTP_200_OK)\r\n\r\n    @action(detail=False, methods=['get'], url_path='history')\r\n    def notification_history(self, request):\r\n        notifications = Notification.objects.filter(users=request.user).order_by('-created_at')[:10]\r\n        serializer = NotificationSerializer(notifications, many=True)\r\n        return Response({\"status\": \"history retrieved\", \"data\": serializer.data}, status=status.HTTP_200_OK)\r\n\r\n\r\nclass NewFeedViewSet(viewsets.ViewSet, generics.RetrieveAPIView):\r\n    queryset = NewFeed.objects.filter(active=True)\r\n    serializer_class = serializers.NewFeedDetailSerializer\r\n    pagination_class = LimitOffsetPagination\r\n    # permission_classes = [IsAuthenticated]\r\n\r\n    def list(self, request):\r\n        feeds = NewFeed.objects.filter(active=True).order_by('-created_at')\r\n        data = serializers.NewFeedSerializer(feeds, many=True, context={'request': request}).data\r\n        return Response(data)\r\n\r\n    def retrieve(self, request, pk=None):\r\n        instance = self.get_object()\r\n        serializer = self.get_serializer(instance)\r\n        return Response(serializer.data)\r\n\r\n    def create(self, request):\r\n        s = serializers.NewFeedCreateSerializer(data=request.data, context={'request': request})\r\n        s.is_valid(raise_exception=True)\r\n        s.save(created_by = request.user)\r\n        return Response(s.data, status=status.HTTP_201_CREATED)\r\n\r\n    @action(methods=['get', 'post'], detail=True, url_path='comments')\r\n    def get_comments(self, request, pk):\r\n        if request.method.__eq__('POST'):\r\n            content = request.data.get('content')\r\n            if not content:\r\n                return Response({\"error\": \"Content cannot be empty\"}, status=status.HTTP_400_BAD_REQUEST)\r\n            u = serializers.CommentSerializer(data={\r\n                'content': request.data.get('content'),\r\n                'user': request.user.pk,\r\n                'news': pk\r\n            })\r\n            u.is_valid(raise_exception=True)\r\n            c = u.save()\r\n            return Response(serializers.CommentSerializer(c).data, status=status.HTTP_201_CREATED)\r\n        else:\r\n            comments = self.get_object().comment_set.select_related('user').filter(active=True)\r\n            page = self.paginate_queryset(comments)\r\n            if page is not None:\r\n                serializer = serializers.CommentSerializer(page, many=True)\r\n                return self.get_paginated_response(serializer.data)\r\n            return Response(serializers.CommentSerializer(comments, many=True).data, status=status.HTTP_200_OK)\r\n\r\n    @action(methods=['post'], detail=True, url_path='like')\r\n    def like(self, request, pk):\r\n        li, created = Like.objects.get_or_create(user=request.user, news_id=pk)\r\n        li.active = not li.active\r\n        li.save()\r\n\r\n        return Response(serializers.NewFeedDetailSerializer(self.get_object(), context={'request': request}).data)\r\n\r\nclass CommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateAPIView):\r\n    queryset = Comment.objects.filter(active=True)\r\n    serializer_class = CommentSerializer\r\n    permission_classes = [perms.IsCommentOwner]\r\n\r\n\r\nclass EmployeePermission(permissions.BasePermission):\r\n    def has_permission(self, request, view):\r\n        return request.user.is_authenticated and request.user.role == 'employee'\r\n\r\nclass ScheduleViewSet(viewsets.ViewSet):\r\n    permission_classes = [IsAuthenticated, EmployeePermission]\r\n\r\n    def list(self, request):\r\n        schedules = Schedule.objects.all()\r\n        serializer = ScheduleSerializer(schedules, many=True)\r\n        return Response(serializer.data, status=status.HTTP_200_OK)\r\n\r\n    @action(methods=['post'], detail=False, url_path='add')\r\n    def add_schedule(self, request):\r\n        serializer = ScheduleSerializer(data=request.data)\r\n        if serializer.is_valid():\r\n            if serializer.validated_data['datetime'] <= timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh')):\r\n                return Response({\"error\": \"Schedule cannot be added\"}, status=status.HTTP_400_BAD_REQUEST)\r\n            serializer.save()\r\n            return Response(serializer.data, status=status.HTTP_201_CREATED)\r\n        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)\r\n\r\n    @action(methods=['put'], detail=True, url_path='update')\r\n    def update_schedule(self, request, pk=None):\r\n        try:\r\n            schedule = Schedule.objects.get(pk=pk)\r\n            current_datetime = timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))\r\n            if schedule.datetime <= current_datetime:\r\n                return Response({\"error\": \"Can't update a schedule that has already occurred\"}, status=status.HTTP_400_BAD_REQUEST)\r\n            serializer = ScheduleSerializer(schedule, data=request.data, partial=True)\r\n            if serializer.is_valid():\r\n                serializer.save()\r\n                members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)\r\n                Notification.objects.create(\r\n                    subject=\"Schedule Updated\",\r\n                    message=f\"Schedule for {schedule.sportclass.name} has been updated!\",\r\n                    users = members,\r\n                )\r\n                return Response(serializer.data, status=status.HTTP_200_OK)\r\n            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)\r\n        except Schedule.DoesNotExist:\r\n            return Response({\"error\": \"Schedule does not exist\"}, status=status.HTTP_404_NOT_FOUND)\r\n\r\n    @action(methods=['delete'], detail=True, url_path='delete')\r\n    def delete_schedule(self, request, pk=None):\r\n        try:\r\n            schedule = Schedule.objects.get(pk=pk)\r\n            current_datetime = timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))\r\n            if schedule.datetime <= current_datetime:\r\n                return Response({\"error\": \"Can't delete a schedule that has already occurred\"}, status=status.HTTP_400_BAD_REQUEST)\r\n            members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)\r\n            Notification.objects.create(\r\n                subject=\"Schedule Canceled\",\r\n                message=f\"Schedule for {schedule.sportclass.name} has been canceled!\",\r\n                users = members,\r\n            )\r\n            schedule.delete()\r\n            return Response(status=status.HTTP_204_NO_CONTENT)\r\n        except Schedule.DoesNotExist:\r\n            return Response({\"error\": \"Schedule does not exist\"}, status=status.HTTP_404_NOT_FOUND)\r\n\r\nclass OrdersViewSet(viewsets.ViewSet):\r\n    permission_classes = [IsAuthenticated, EmployeePermission]\r\n\r\n    @action(methods=['get'], detail=False)\r\n    def list_orders(self, request):\r\n        orders = Order.objects.filter(is_paid=False, active=True).order_by('-created_at')\r\n        serializer = OrderSerializer(orders, many=True)\r\n        return Response(serializer.data, status=status.HTTP_200_OK)\r\n\r\nclass AdminPermission(permissions.BasePermission):\r\n    def has_permission(self, request, view):\r\n        return request.user.is_authenticated and request.user.role == 'admin'\r\n\r\nclass AdminStatsViewSet(viewsets.ViewSet):\r\n    permission_classes = [IsAuthenticated, AdminPermission]\r\n\r\n    def _parse_date(self, date_str):\r\n        try:\r\n            return datetime.strptime(date_str, '%Y-%m-%d').date()\r\n        except ValueError:\r\n            raise ValidationError(\"Invalid date format. Use YYYY-MM-DD\")\r\n\r\n    def _get_time_period(self, period_type, start_date):\r\n        if period_type == 'week':\r\n            start = start_date - timedelta(days=start_date.weekday()) # Bắt đầu từ thứ Hai\r\n            end= start + timedelta(days=6)\r\n        elif period_type == 'month':\r\n            start = start_date.replace(day=1)\r\n            if start.month < 12:\r\n                end= start.replace(month=start.month + 1, day=1) - timedelta(days=1)\r\n            else:\r\n                end=start.replace(month=12, day=31)\r\n        elif period_type == 'year':\r\n            start = start_date.replace(month=1, day=1)\r\n            end = start.replace(month=12, day=31)\r\n        else:\r\n            raise ValidationError(\"Invalid period type\")\r\n        return start, end\r\n\r\n    def list(self, request):\r\n        date_str = request.query_params.get('date', None)\r\n        period= request.query_params.get('period', 'week')\r\n        # Xác định ngày bắt đầu\r\n        if date_str:\r\n            start_date=self._parse_date(date_str)\r\n        else:\r\n            start_date=timezone.now().date()\r\n        # Tinh khoang tg\r\n        start_date, end_date = self._get_time_period(period, start_date)\r\n        #Thống kê số lượng hội viên\r\n        member_count=User.objects.filter(\r\n            role ='member',\r\n            date_joined__range=[start_date, end_date]\r\n        ).count()\r\n\r\n        #Thống kê doanh thu\r\n        revenue = Order.objects.filter(\r\n            is_paid=True,\r\n            created_at__range=[start_date, end_date]\r\n        ).aggregate(total_revenue=Sum('price'))['total_revenue'] or 0.0\r\n\r\n        # Thống kê hiệu suất\r\n        schedule_stats = Schedule.objects.filter(\r\n            datetime__range=[start_date, end_date]\r\n        ).values('sportclass__name').annotate(\r\n            scheduled = Count('id', filter=Q(active=True)),\r\n            canceled = Count('id', filter=Q(active=False)),\r\n        ).order_by('sportclass__name')\r\n\r\n        performance = MemberJoinClass.objects.filter(\r\n            joining_date__range=[start_date, end_date]\r\n        ).values('sportclass__name').annotate(\r\n            member_count=Count('user', distinct=True),\r\n        ).order_by('sportclass__name')\r\n\r\n        return Response({\r\n            'period': period,\r\n            'start_date': start_date,\r\n            'end_date': end_date,\r\n            'member_count': member_count,\r\n            'revenue': revenue,\r\n            'schedule_stats': [\r\n                {\r\n                    'class_name': item['sportclass__name'],\r\n                    'scheduled': item['scheduled'],\r\n                    'canceled': item['canceled']\r\n                } for item in schedule_stats\r\n            ] ,\r\n            'performance': [\r\n                {\r\n                    'class_name': item['sportclass__name'],\r\n                    'member_count': item['member_count'],\r\n\r\n                } for item in performance\r\n            ],\r\n        })\r\n\r\n\r\n# GET /admin-stats/stats/?date=2025-05-01&period=month\r\n# GET /admin-stats/stats/?period=week\r\n#\r\n# #Đăng ký thiết bị\r\n# class RegisterDeviceView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def post(self, request):\r\n#         token = request.data.get('token')\r\n#         device_type = request.data.get('device_type')\r\n#         if token and device_type == 'android':\r\n#             Device.objects.update_or_create(\r\n#                 user=request.user,\r\n#                 defaults={'token': token, 'device_type': device_type, 'active': True}\r\n#             )\r\n#             return Response({\"status\": \"device registered\"})\r\n#         return Response({\"error\": \"invalid data\"}, status=status.HTTP_400_BAD_REQUEST)\r\n#\r\n# #Gửi thông báo thử\r\n# class SendTestNotificationView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def post(self, request):\r\n#         response = NotificationService.send_notification(\r\n#             users=[request.user],\r\n#             title=\"Test Notification\",\r\n#             body=\"This is a test notification from GymApp\"\r\n#         )\r\n#         return Response({\"status\": \"notification sent\", \"response\": response})\r\n#\r\n#\r\n# #Lấy danh sách thiết bị\r\n# class DeviceStatusView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def get(self, request):\r\n#         devices = Device.objects.filter(user=request.user, active=True)\r\n#         serializer = DeviceSerializer(devices, many=True)\r\n#         return Response({\"status\":\"devices retrieved\", \"data\":serializer.data}, status=status.HTTP_200_OK)\r\n#\r\n# #Gửi nhắc nhở lịch học\r\n# class SendScheduleReminderView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def post(self, request):\r\n#         print(\"Token người dùng:\", request.auth)\r\n#         print(\"User:\", request.user)\r\n#\r\n#         schedule_id = request.data.get('schedule_id')\r\n#         try:\r\n#             schedule = Schedule.objects.get(id=schedule_id)\r\n#         except Schedule.DoesNotExist:\r\n#             return Response({\"error\": \"Schedule không tồn tại.\"}, status=status.HTTP_400_BAD_REQUEST)\r\n#\r\n#         members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).select_related('user')\r\n#         for member in members:\r\n#             NotificationService.send_schedule_reminder(member.user, schedule)\r\n#         return Response({\"status\": \"reminder sent\"}, status=status.HTTP_200_OK)\r\n#\r\n#\r\n# #Gửi thông báo khuyến mãi\r\n# class SendPromotionNotificationView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def post(self, request):\r\n#         print(\"User:\", request.user)\r\n#         print(\"User Role:\", getattr(request.user, 'role', None))\r\n#         if request.user.role != 'admin' and not request.user.is_superuser:\r\n#             return Response({\"error\": \"Only admin can send promotions\"}, status=status.HTTP_403_FORBIDDEN)\r\n#         discount_id = request.data.get('discount_id')\r\n#         try:\r\n#             discount = Discount.objects.get(id=discount_id)\r\n#         except Discount.DoesNotExist:\r\n#             return Response({\"error\": \"Discount does not exist\"}, status=status.HTTP_404_NOT_FOUND)\r\n#         members = User.objects.filter(role='member')\r\n#         response = NotificationService.send_promotion_notification(members, discount)\r\n#         return Response({\"status\": \"promotion sent\", \"response\": response})\r\n#\r\n# #Gửi thông báo hanfg loạt\r\n# class BulkSendPromotionView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#     def post(self, request):\r\n#         print(\"User:\", request.user)\r\n#         print(\"User Role:\", getattr(request.user, 'role', None))\r\n#\r\n#         if request.user.role != 'admin' and not request.user.is_superuser:\r\n#             return Response({\"error\": \"Only admin can send bulk promotions\"}, status=status.HTTP_403_FORBIDDEN)\r\n#         discount_ids = request.data.get('discount_ids', [])\r\n#         if not discount_ids:\r\n#             return Response({\"error\": \"No discount ids\"}, status=status.HTTP_400_BAD_REQUEST)\r\n#         members = User.objects.filter(role='member')\r\n#         for discount_id in discount_ids:\r\n#             try:\r\n#                 discount = Discount.objects.get(id=discount_id)\r\n#                 NotificationService.send_promotion_notification(members, discount)\r\n#             except Discount.DoesNotExist:\r\n#                 continue\r\n#         return Response({\"status\": \"bulk promotion sent\"}, status=status.HTTP_200_OK)\r\n#\r\n#\r\n# #Lấy lịch sử thông baso\r\n# class NotificationsHistoryView(APIView):\r\n#     permission_classes = [IsAuthenticated]\r\n#\r\n#     def get(self, request):\r\n#         notifications = Notification.objects.filter(users=request.user).order_by('-created_at')[:10]\r\n#         serializer = NotificationSerializer(notifications, many=True)\r\n#         return Response({\"status\":\"history retrieved\", \"data\":serializer.data}, status=status.HTTP_200_OK)\r\n#\r\n# class NotifyMembersView(APIView):\r\n#     permission_classes = [IsAuthenticated, EmployeePermission]\r\n#\r\n#     def post(self, request, pk):\r\n#         try:\r\n#             schedule = Schedule.objects.get(pk=pk)\r\n#             members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)\r\n#             notification = Notification.objects.create(\r\n#                 subject=\"Schedule Update\",\r\n#                 message=f\"Schedule for {schedule.sportclass.name} has been updated!\",\r\n#                 users=members\r\n#             )\r\n#             serializer = NotificationSerializer(notification)\r\n#             return Response(serializer.data, status=status.HTTP_200_OK)\r\n#         except Schedule.DoesNotExist:\r\n#             return Response({\"error\": \"Schedule does not exist\"}, status=status.HTTP_404_NOT_FOUND)
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sports/views.py b/sportapp/sports/views.py
+--- a/sportapp/sports/views.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sports/views.py	(date 1748053626154)
+@@ -17,8 +17,11 @@
+ 
+ 
+ class UserViewSet(viewsets.ViewSet):
+-    queryset = User.objects.filter(is_active=True)
+-    serializer_class = UserSerializer
++    permission_classes = [permissions.IsAuthenticated]
++
++    @action(detail=False, methods=['get'], url_path='current-user')
++    def get_current_user(self, request):
++        return Response(serializers.UserSerializer(request.user).data)
+ 
+ class DeviceViewSet(viewsets.ViewSet):
+     permission_classes = [IsAuthenticated]
+@@ -107,10 +110,17 @@
+     queryset = NewFeed.objects.filter(active=True)
+     serializer_class = serializers.NewFeedDetailSerializer
+     pagination_class = LimitOffsetPagination
+-    # permission_classes = [IsAuthenticated]
++    permission_classes = [IsAuthenticated]
+ 
+     def list(self, request):
+-        feeds = NewFeed.objects.filter(active=True).order_by('-created_at')
++        feeds = NewFeed.objects.filter(active=True)
++        category = request.query_params.get('category')
++        if category:
++            feeds = feeds.filter(category=category)
++        search = request.query_params.get('search')
++        if search:
++            feeds = feeds.filter(Q(title__icontains=search)| Q(content__icontains=search))
++        feeds = feeds.order_by('-created_at')
+         data = serializers.NewFeedSerializer(feeds, many=True, context={'request': request}).data
+         return Response(data)
+ 
+@@ -122,7 +132,7 @@
+     def create(self, request):
+         s = serializers.NewFeedCreateSerializer(data=request.data, context={'request': request})
+         s.is_valid(raise_exception=True)
+-        s.save(created_by = request.user)
++        s.save() #bỏ created_by = request.user
+         return Response(s.data, status=status.HTTP_201_CREATED)
+ 
+     @action(methods=['get', 'post'], detail=True, url_path='comments')
+@@ -320,128 +330,3 @@
+         })
+ 
+ 
+-# GET /admin-stats/stats/?date=2025-05-01&period=month
+-# GET /admin-stats/stats/?period=week
+-#
+-# #Đăng ký thiết bị
+-# class RegisterDeviceView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def post(self, request):
+-#         token = request.data.get('token')
+-#         device_type = request.data.get('device_type')
+-#         if token and device_type == 'android':
+-#             Device.objects.update_or_create(
+-#                 user=request.user,
+-#                 defaults={'token': token, 'device_type': device_type, 'active': True}
+-#             )
+-#             return Response({"status": "device registered"})
+-#         return Response({"error": "invalid data"}, status=status.HTTP_400_BAD_REQUEST)
+-#
+-# #Gửi thông báo thử
+-# class SendTestNotificationView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def post(self, request):
+-#         response = NotificationService.send_notification(
+-#             users=[request.user],
+-#             title="Test Notification",
+-#             body="This is a test notification from GymApp"
+-#         )
+-#         return Response({"status": "notification sent", "response": response})
+-#
+-#
+-# #Lấy danh sách thiết bị
+-# class DeviceStatusView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def get(self, request):
+-#         devices = Device.objects.filter(user=request.user, active=True)
+-#         serializer = DeviceSerializer(devices, many=True)
+-#         return Response({"status":"devices retrieved", "data":serializer.data}, status=status.HTTP_200_OK)
+-#
+-# #Gửi nhắc nhở lịch học
+-# class SendScheduleReminderView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def post(self, request):
+-#         print("Token người dùng:", request.auth)
+-#         print("User:", request.user)
+-#
+-#         schedule_id = request.data.get('schedule_id')
+-#         try:
+-#             schedule = Schedule.objects.get(id=schedule_id)
+-#         except Schedule.DoesNotExist:
+-#             return Response({"error": "Schedule không tồn tại."}, status=status.HTTP_400_BAD_REQUEST)
+-#
+-#         members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).select_related('user')
+-#         for member in members:
+-#             NotificationService.send_schedule_reminder(member.user, schedule)
+-#         return Response({"status": "reminder sent"}, status=status.HTTP_200_OK)
+-#
+-#
+-# #Gửi thông báo khuyến mãi
+-# class SendPromotionNotificationView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def post(self, request):
+-#         print("User:", request.user)
+-#         print("User Role:", getattr(request.user, 'role', None))
+-#         if request.user.role != 'admin' and not request.user.is_superuser:
+-#             return Response({"error": "Only admin can send promotions"}, status=status.HTTP_403_FORBIDDEN)
+-#         discount_id = request.data.get('discount_id')
+-#         try:
+-#             discount = Discount.objects.get(id=discount_id)
+-#         except Discount.DoesNotExist:
+-#             return Response({"error": "Discount does not exist"}, status=status.HTTP_404_NOT_FOUND)
+-#         members = User.objects.filter(role='member')
+-#         response = NotificationService.send_promotion_notification(members, discount)
+-#         return Response({"status": "promotion sent", "response": response})
+-#
+-# #Gửi thông báo hanfg loạt
+-# class BulkSendPromotionView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#     def post(self, request):
+-#         print("User:", request.user)
+-#         print("User Role:", getattr(request.user, 'role', None))
+-#
+-#         if request.user.role != 'admin' and not request.user.is_superuser:
+-#             return Response({"error": "Only admin can send bulk promotions"}, status=status.HTTP_403_FORBIDDEN)
+-#         discount_ids = request.data.get('discount_ids', [])
+-#         if not discount_ids:
+-#             return Response({"error": "No discount ids"}, status=status.HTTP_400_BAD_REQUEST)
+-#         members = User.objects.filter(role='member')
+-#         for discount_id in discount_ids:
+-#             try:
+-#                 discount = Discount.objects.get(id=discount_id)
+-#                 NotificationService.send_promotion_notification(members, discount)
+-#             except Discount.DoesNotExist:
+-#                 continue
+-#         return Response({"status": "bulk promotion sent"}, status=status.HTTP_200_OK)
+-#
+-#
+-# #Lấy lịch sử thông baso
+-# class NotificationsHistoryView(APIView):
+-#     permission_classes = [IsAuthenticated]
+-#
+-#     def get(self, request):
+-#         notifications = Notification.objects.filter(users=request.user).order_by('-created_at')[:10]
+-#         serializer = NotificationSerializer(notifications, many=True)
+-#         return Response({"status":"history retrieved", "data":serializer.data}, status=status.HTTP_200_OK)
+-#
+-# class NotifyMembersView(APIView):
+-#     permission_classes = [IsAuthenticated, EmployeePermission]
+-#
+-#     def post(self, request, pk):
+-#         try:
+-#             schedule = Schedule.objects.get(pk=pk)
+-#             members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
+-#             notification = Notification.objects.create(
+-#                 subject="Schedule Update",
+-#                 message=f"Schedule for {schedule.sportclass.name} has been updated!",
+-#                 users=members
+-#             )
+-#             serializer = NotificationSerializer(notification)
+-#             return Response(serializer.data, status=status.HTTP_200_OK)
+-#         except Schedule.DoesNotExist:
+-#             return Response({"error": "Schedule does not exist"}, status=status.HTTP_404_NOT_FOUND)
+\ No newline at end of file
+Index: sportapp/sportapp/urls.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>\"\"\"\r\nURL configuration for sportapp project.\r\n\r\nThe `urlpatterns` list routes URLs to views. For more information please see:\r\n    https://docs.djangoproject.com/en/5.1/topics/http/urls/\r\nExamples:\r\nFunction views\r\n    1. Add an import:  from my_app import views\r\n    2. Add a URL to urlpatterns:  path('', views.home, name='home')\r\nClass-based views\r\n    1. Add an import:  from other_app.views import Home\r\n    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')\r\nIncluding another URLconf\r\n    1. Import the include() function: from django.urls import include, path\r\n    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))\r\n\"\"\"\r\nfrom django.contrib import admin\r\nfrom django.urls import path, include, re_path\r\nfrom drf_yasg.views import get_schema_view\r\nfrom drf_yasg import openapi\r\nfrom rest_framework import permissions\r\n\r\n\r\nschema_view = get_schema_view(\r\n    openapi.Info(\r\n        title=\"Course API\",\r\n        default_version='v1',\r\n        description=\"APIs for CourseApp\",\r\n        contact=openapi.Contact(email=\"thanh.dh@ou.edu.vn\"),\r\n        license=openapi.License(name=\"Dương Hữu Thành@2025\"),\r\n    ),\r\n    public=True,\r\n    permission_classes=(permissions.AllowAny,),\r\n)\r\nurlpatterns = [\r\n    path('admin/', admin.site.urls),\r\n    path('', include('sports.urls')),\r\n    re_path(r'^ckeditor/', include('ckeditor_uploader.urls')),\r\n    re_path(r'^swagger(?P<format>\\.json|\\.yaml)$',\r\n            schema_view.without_ui(cache_timeout=0),\r\n            name='schema-json'),\r\n    re_path(r'^swagger/$',\r\n            schema_view.with_ui('swagger', cache_timeout=0),\r\n            name='schema-swagger-ui'),\r\n    re_path(r'^redoc/$',\r\n            schema_view.with_ui('redoc', cache_timeout=0),\r\n            name='schema-redoc'),\r\n    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),\r\n\r\n]\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sportapp/urls.py b/sportapp/sportapp/urls.py
+--- a/sportapp/sportapp/urls.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sportapp/urls.py	(date 1748053626154)
+@@ -19,6 +19,8 @@
+ from drf_yasg.views import get_schema_view
+ from drf_yasg import openapi
+ from rest_framework import permissions
++from django.conf import settings
++from django.conf.urls.static import static
+ 
+ 
+ schema_view = get_schema_view(
+@@ -47,4 +49,4 @@
+             name='schema-redoc'),
+     path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+ 
+-]
++] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+Index: sportapp/sports/serializers.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from rest_framework import serializers\r\n\r\nfrom .models import Notification, Schedule, NewFeed, Device, Comment, Like, User, Order\r\n\r\n\r\nclass UserSerializer(serializers.ModelSerializer):\r\n    def to_representation(self, instance):\r\n        data = super().to_representation(instance)\r\n        return data\r\n\r\n    class Meta:\r\n        model = User\r\n        fields = ['username', 'password', 'first_name', 'last_name']\r\n        extra_kwargs = {\r\n            'password': {\r\n                'write_only': True\r\n            }\r\n        }\r\n\r\n    def create(self, validated_data):\r\n        data = validated_data.copy()\r\n        u = User(**data)\r\n        u.set_password(u.password)\r\n        u.save()\r\n        return u\r\n\r\n\r\nclass NotificationSerializer(serializers.ModelSerializer):\r\n    class Meta:\r\n        model = Notification\r\n        fields = ['subject', 'message', 'created_at']\r\n\r\nclass DeviceSerializer(serializers.ModelSerializer):\r\n    class Meta:\r\n        model = Device\r\n        fields = ['token', 'device_type', 'active']\r\n\r\nclass ScheduleSerializer(serializers.ModelSerializer):\r\n    class Meta:\r\n        model = Schedule\r\n        fields = '__all__'\r\n\r\nclass OrderSerializer(serializers.ModelSerializer):\r\n    class Meta:\r\n        model = Order\r\n        fields = '__all__'\r\n\r\nclass CommentSerializer(serializers.ModelSerializer):\r\n    def to_representation(self, instance):\r\n        data = super().to_representation(instance)\r\n        data['user'] = UserSerializer(instance.user).data\r\n        return data\r\n\r\n    class Meta:\r\n        model = Comment\r\n        fields = ['id', 'user', 'content', 'created_at', 'news']\r\n        extra_kwargs = {\r\n            'news': {\r\n                'write_only': True\r\n            }\r\n        }\r\n\r\nclass NewFeedSerializer(serializers.ModelSerializer):\r\n    def to_representation(self, instance):\r\n        data = super().to_representation(instance)\r\n        data['image'] = instance.image.url if instance.image else ''\r\n        return data\r\n\r\n    class Meta:\r\n        model = NewFeed\r\n        fields = ['id', 'title', 'created_by', 'created_at', 'image']\r\n\r\nclass NewFeedDetailSerializer(NewFeedSerializer):\r\n    liked = serializers.SerializerMethodField()\r\n    like_count = serializers.SerializerMethodField()\r\n\r\n    def get_liked(self, news):\r\n        request = self.context.get('request')\r\n        if request.user.is_authenticated:\r\n            return news.like_set.filter(user=request.user, active=True).exists()\r\n\r\n    def get_like_count(self, news):\r\n        return news.like_set.filter(active=True).count()\r\n\r\n    class Meta:\r\n        model = NewFeedSerializer.Meta.model\r\n        fields = NewFeedSerializer.Meta.fields + ['content', 'liked', 'like_count']\r\n\r\nclass NewFeedCreateSerializer(serializers.ModelSerializer):\r\n    class Meta:\r\n        model = NewFeed\r\n        fields = ['title', 'content', 'image']\r\n\r\n    def create(self, validated_data):\r\n        user = self.context['request'].user\r\n        return NewFeed.objects.create(created_by = user, **validated_data)\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sports/serializers.py b/sportapp/sports/serializers.py
+--- a/sportapp/sports/serializers.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sports/serializers.py	(date 1748053626154)
+@@ -68,7 +68,7 @@
+ 
+     class Meta:
+         model = NewFeed
+-        fields = ['id', 'title', 'created_by', 'created_at', 'image']
++        fields = ['id', 'title', 'created_by', 'created_at', 'image', 'category']
+ 
+ class NewFeedDetailSerializer(NewFeedSerializer):
+     liked = serializers.SerializerMethodField()
+Index: sportapp/sportapp/settings.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>\"\"\"\r\nDjango settings for sportapp project.\r\n\r\nGenerated by 'django-admin startproject' using Django 5.1.7.\r\n\r\nFor more information on this file, see\r\nhttps://docs.djangoproject.com/en/5.1/topics/settings/\r\n\r\nFor the full list of settings and their values, see\r\nhttps://docs.djangoproject.com/en/5.1/ref/settings/\r\n\"\"\"\r\n\r\nfrom pathlib import Path\r\n\r\n# Build paths inside the project like this: BASE_DIR / 'subdir'.\r\nBASE_DIR = Path(__file__).resolve().parent.parent\r\n\r\n\r\n# Quick-start development settings - unsuitable for production\r\n# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/\r\n\r\n# SECURITY WARNING: keep the secret key used in production secret!\r\nSECRET_KEY = 'django-insecure-w5nbyi0=y$@927cb)cl90mfpq-tm!!fp7@n*q+8w9*o)s-sp&d'\r\n\r\n# SECURITY WARNING: don't run with debug turned on in production!\r\nDEBUG = True\r\n\r\nALLOWED_HOSTS = ['*']\r\n\r\n\r\n# Application definition\r\n\r\nINSTALLED_APPS = [\r\n    'django.contrib.admin',\r\n    'django.contrib.auth',\r\n    'django.contrib.contenttypes',\r\n    'django.contrib.sessions',\r\n    'django.contrib.messages',\r\n    'django.contrib.staticfiles',\r\n    'sports.apps.SportsConfig',\r\n    'ckeditor',\r\n    'ckeditor_uploader',\r\n    'rest_framework',\r\n    'rest_framework_simplejwt',\r\n    'drf_yasg',\r\n    'oauth2_provider',\r\n    'corsheaders',\r\n    # 'django_celery_beat',\r\n]\r\n\r\nCKEDITOR_UPLOAD_PATH = 'ckeditor/newsfeed/'\r\n\r\nREST_FRAMEWORK = {\r\n    'DEFAULT_AUTHENTICATION_CLASSES': [\r\n        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',\r\n        'rest_framework_simplejwt.authentication.JWTAuthentication',\r\n    ],\r\n    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',\r\n    'PAGE_SIZE': 2, # Đặt mặc định là 20 bình luận mỗi lần\r\n\r\n}\r\n\r\nMEDIA_ROOT = '%s/sports/static/' % BASE_DIR\r\n\r\n# CELERY_BROKER_URL = 'redis://localhost:6379/0'\r\n# CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'\r\n\r\nMIDDLEWARE = [\r\n    'django.middleware.security.SecurityMiddleware',\r\n    'django.contrib.sessions.middleware.SessionMiddleware',\r\n    'django.middleware.common.CommonMiddleware',\r\n    'django.middleware.csrf.CsrfViewMiddleware',\r\n    'django.contrib.auth.middleware.AuthenticationMiddleware',\r\n    'django.contrib.messages.middleware.MessageMiddleware',\r\n    'django.middleware.clickjacking.XFrameOptionsMiddleware',\r\n    'corsheaders.middleware.CorsMiddleware',\r\n]\r\n\r\nCORS_ALLOW_ALL_ORIGINS = True\r\n\r\nROOT_URLCONF = 'sportapp.urls'\r\n\r\nTEMPLATES = [\r\n    {\r\n        'BACKEND': 'django.template.backends.django.DjangoTemplates',\r\n        'DIRS': [],\r\n        'APP_DIRS': True,\r\n        'OPTIONS': {\r\n            'context_processors': [\r\n                'django.template.context_processors.debug',\r\n                'django.template.context_processors.request',\r\n                'django.contrib.auth.context_processors.auth',\r\n                'django.contrib.messages.context_processors.messages',\r\n            ],\r\n        },\r\n    },\r\n]\r\n\r\nWSGI_APPLICATION = 'sportapp.wsgi.application'\r\n\r\n\r\n# Database\r\n# https://docs.djangoproject.com/en/5.1/ref/settings/#databases\r\n\r\nDATABASES = {\r\n    'default': {\r\n        'ENGINE': 'django.db.backends.mysql',\r\n        'NAME': 'sportdb',\r\n        'USER': 'root',\r\n        'PASSWORD': 'Abc@123',\r\n        'HOST': 'localhost',\r\n        'PORT': '3306',\r\n        'OPTIONS': {\r\n            'charset': 'utf8mb4',\r\n        }\r\n    }\r\n}\r\n\r\nAUTH_USER_MODEL = 'sports.User'\r\n\r\nimport pymysql\r\npymysql.install_as_MySQLdb()\r\n\r\n# Password validation\r\n# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators\r\n\r\nAUTH_PASSWORD_VALIDATORS = [\r\n    {\r\n        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',\r\n    },\r\n    {\r\n        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',\r\n    },\r\n    {\r\n        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',\r\n    },\r\n    {\r\n        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',\r\n    },\r\n]\r\n\r\n\r\n# Internationalization\r\n# https://docs.djangoproject.com/en/5.1/topics/i18n/\r\n\r\nLANGUAGE_CODE = 'en-us'\r\n\r\nTIME_ZONE = 'UTC'\r\n\r\nUSE_I18N = True\r\n\r\nUSE_TZ = True\r\n\r\n\r\n# Static files (CSS, JavaScript, Images)\r\n# https://docs.djangoproject.com/en/5.1/howto/static-files/\r\n\r\nSTATIC_URL = 'static/'\r\n\r\n# Default primary key field type\r\n# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field\r\n\r\nDEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sportapp/settings.py b/sportapp/sportapp/settings.py
+--- a/sportapp/sportapp/settings.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sportapp/settings.py	(date 1748053626154)
+@@ -10,11 +10,14 @@
+ https://docs.djangoproject.com/en/5.1/ref/settings/
+ """
+ 
++import os
+ from pathlib import Path
+ 
+ # Build paths inside the project like this: BASE_DIR / 'subdir'.
+ BASE_DIR = Path(__file__).resolve().parent.parent
+ 
++MEDIA_URL = '/media/'
++MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+ 
+ # Quick-start development settings - unsuitable for production
+ # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"9a99d9b2-1022-43fb-844b-55bef7d7e942\" name=\"Changes\" comment=\"\">\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\r\n      <change beforePath=\"$PROJECT_DIR$/sportapp/sports/models.py\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/sportapp/sports/models.py\" afterDir=\"false\" />\r\n    </list>\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {\r\n    &quot;state&quot;: &quot;OPEN&quot;,\r\n    &quot;assignee&quot;: &quot;tandzhl&quot;\r\n  }\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\">{\r\n  &quot;selectedUrlAndAccountId&quot;: {\r\n    &quot;url&quot;: &quot;https://github.com/tandzhl/SportApp.git&quot;,\r\n    &quot;accountId&quot;: &quot;d969ef4d-9efa-4b2b-8277-d156de84e5c4&quot;\r\n  }\r\n}</component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;associatedIndex&quot;: 6\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"2uzZZwXFgRXltFNkmVEUYud0la2\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\"><![CDATA[{\r\n  \"keyToString\": {\r\n    \"RunOnceActivity.ShowReadmeOnStart\": \"true\",\r\n    \"RunOnceActivity.git.unshallow\": \"true\",\r\n    \"git-widget-placeholder\": \"main\",\r\n    \"last_opened_file_path\": \"D:/BTL/BTL_LTHD/Backend/sportapp\",\r\n    \"nodejs_package_manager_path\": \"npm\",\r\n    \"vue.rearranger.settings.migration\": \"true\"\r\n  }\r\n}]]></component>\r\n  <component name=\"SharedIndexes\">\r\n    <attachedChunks>\r\n      <set>\r\n        <option value=\"bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.23339.19\" />\r\n        <option value=\"bundled-python-sdk-0029f7779945-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.23339.19\" />\r\n      </set>\r\n    </attachedChunks>\r\n  </component>\r\n  <component name=\"SpellCheckerSettings\" RuntimeDictionaries=\"0\" Folders=\"0\" CustomDictionaries=\"0\" DefaultDictionary=\"application-level\" UseSingleDictionary=\"true\" transferred=\"true\" />\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\r\n      <changelist id=\"9a99d9b2-1022-43fb-844b-55bef7d7e942\" name=\"Changes\" comment=\"\" />\r\n      <created>1743253423332</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1743253423332</updated>\r\n      <workItem from=\"1743253424490\" duration=\"6000\" />\r\n      <workItem from=\"1743322069446\" duration=\"24000\" />\r\n      <workItem from=\"1746372855897\" duration=\"110000\" />\r\n    </task>\r\n    <servers />\r\n  </component>\r\n  <component name=\"TypeScriptGeneratedFilesManager\">\r\n    <option name=\"version\" value=\"3\" />\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/.idea/workspace.xml	(date 1748053626137)
+@@ -1,9 +1,19 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
++  <component name="AutoImportSettings">
++    <option name="autoReloadType" value="SELECTIVE" />
++  </component>
+   <component name="ChangeListManager">
+     <list default="true" id="9a99d9b2-1022-43fb-844b-55bef7d7e942" name="Changes" comment="">
+       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sportapp/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sportapp/settings.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sportapp/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sportapp/urls.py" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/sportapp/sports/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/models.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sports/serializers.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/serializers.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sports/static/news/2025/05/Screenshot_2024-12-15_185755.png" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/media/news/2025/05/Screenshot_2024-12-15_185755.png" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sports/static/news/2025/05/tải_xuống.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/media/news/2025/05/tải_xuống.jpg" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sports/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/urls.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/sportapp/sports/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/views.py" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -33,16 +43,20 @@
+     <option name="hideEmptyMiddlePackages" value="true" />
+     <option name="showLibraryContents" value="true" />
+   </component>
+-  <component name="PropertiesComponent"><![CDATA[{
+-  "keyToString": {
+-    "RunOnceActivity.ShowReadmeOnStart": "true",
+-    "RunOnceActivity.git.unshallow": "true",
+-    "git-widget-placeholder": "main",
+-    "last_opened_file_path": "D:/BTL/BTL_LTHD/Backend/sportapp",
+-    "nodejs_package_manager_path": "npm",
+-    "vue.rearranger.settings.migration": "true"
++  <component name="PropertiesComponent">{
++  &quot;keyToString&quot;: {
++    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
++    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
++    &quot;last_opened_file_path&quot;: &quot;D:/BTL/BTL_LTHD/Backend&quot;,
++    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
++    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
++    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
++    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
++    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
++    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+   }
+-}]]></component>
++}</component>
+   <component name="SharedIndexes">
+     <attachedChunks>
+       <set>
+@@ -62,6 +76,8 @@
+       <workItem from="1743253424490" duration="6000" />
+       <workItem from="1743322069446" duration="24000" />
+       <workItem from="1746372855897" duration="110000" />
++      <workItem from="1748052653951" duration="401000" />
++      <workItem from="1748053063397" duration="299000" />
+     </task>
+     <servers />
+   </component>
+Index: sportapp/sports/urls.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from django.urls import path, include\r\nfrom rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView\r\nfrom rest_framework.routers import DefaultRouter\r\nfrom .views import (\r\n    DeviceViewSet, NotificationViewSet, NewFeedViewSet, CommentViewSet,\r\n    ScheduleViewSet, OrdersViewSet, AdminStatsViewSet\r\n)\r\n\r\nrouter = DefaultRouter()\r\nrouter.register('newfeed', NewFeedViewSet, basename='newfeed')\r\nrouter.register('comments', CommentViewSet, basename='comments')\r\nrouter.register('schedules', ScheduleViewSet, basename='schedules')\r\nrouter.register('devices', DeviceViewSet, basename='devices')\r\nrouter.register('notifications', NotificationViewSet, basename='notifications')\r\nrouter.register('orders', OrdersViewSet, basename='orders')\r\nrouter.register('stats', AdminStatsViewSet, basename='stats')\r\n\r\nauth_patterns = [\r\n    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),\r\n    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),\r\n]\r\n\r\nurlpatterns = [\r\n    path('auth/', include(auth_patterns)),\r\n    path('', include(router.urls)),\r\n]
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sports/urls.py b/sportapp/sports/urls.py
+--- a/sportapp/sports/urls.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sports/urls.py	(date 1748053626154)
+@@ -3,7 +3,7 @@
+ from rest_framework.routers import DefaultRouter
+ from .views import (
+     DeviceViewSet, NotificationViewSet, NewFeedViewSet, CommentViewSet,
+-    ScheduleViewSet, OrdersViewSet, AdminStatsViewSet
++    ScheduleViewSet, OrdersViewSet, AdminStatsViewSet, UserViewSet
+ )
+ 
+ router = DefaultRouter()
+@@ -14,6 +14,7 @@
+ router.register('notifications', NotificationViewSet, basename='notifications')
+ router.register('orders', OrdersViewSet, basename='orders')
+ router.register('stats', AdminStatsViewSet, basename='stats')
++router.register('users', UserViewSet, basename='users')
+ 
+ auth_patterns = [
+     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+Index: sportapp/sports/models.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from django.core.validators import MaxValueValidator, MinValueValidator\r\nfrom django.db import models\r\nfrom django.contrib.auth.models import AbstractUser\r\nfrom django.db.models.fields import TextField\r\nfrom ckeditor.fields import RichTextField\r\n\r\n\r\nclass UserRole(models.Choices):\r\n    Admin = 'admin'\r\n    Member = 'member'\r\n    Employee = 'employee'\r\n\r\nclass Payment(models.IntegerChoices):\r\n    Cash_payment = 1, 'Cash'\r\n    Momo_payment = 2, 'Momo'\r\n    Banking = 3, 'Banking'\r\n\r\nclass User(AbstractUser):\r\n    role = models.CharField(max_length=20,choices=UserRole,default=UserRole.Member)\r\n    notification = models.ManyToManyField('Notification', blank=True)\r\n\r\nclass BaseModel(models.Model):\r\n    active = models.BooleanField(default=True)\r\n    created_at = models.DateTimeField(auto_now_add=True)\r\n    updated_at = models.DateTimeField(auto_now=True)\r\n\r\n    class Meta:\r\n        abstract = True\r\n\r\nclass Category(BaseModel):\r\n    name = models.CharField(max_length=100, unique=True) #unique\r\n\r\n    def __str__(self):\r\n        return self.name\r\n\r\nclass SportClass(BaseModel):\r\n    name = models.CharField(max_length=100, unique=True) #unique\r\n    description = models.TextField() #\r\n    coach = models.ForeignKey(User, on_delete=models.CASCADE)\r\n\r\n\r\nclass Schedule(BaseModel):\r\n    datetime = models.DateTimeField()\r\n    sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)\r\n\r\nclass MemberJoinClass(BaseModel):\r\n    user = models.ForeignKey(User, on_delete=models.CASCADE)\r\n    sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)\r\n    joining_date = models.DateTimeField(auto_now_add=True)\r\n\r\nclass Order(BaseModel):\r\n    user = models.ForeignKey(User, on_delete=models.CASCADE)\r\n    sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)\r\n    price = models.FloatField(default=0.0) #dam bao khong am\r\n    is_paid = models.BooleanField(default=False)\r\n    payment = models.IntegerField(choices=Payment, default=Payment.Cash_payment)\r\n\r\nclass Discount(BaseModel):\r\n    name = models.CharField(max_length=100, unique=True) #unique\r\n    percent = models.FloatField(\r\n        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],\r\n    )\r\n    order = models.ForeignKey(Order, on_delete=models.CASCADE)\r\n\r\nclass Notification(BaseModel):\r\n    subject = models.CharField(max_length=100)\r\n    message = models.TextField()\r\n    users = models.ManyToManyField(User, related_name='notifications')\r\n\r\nclass Device(models.Model):\r\n    user = models.ForeignKey(User, on_delete=models.CASCADE)\r\n    token = models.CharField(max_length=255, unique=True)\r\n    device_type = models.CharField(max_length=10, choices = (('ios', 'iOS'), ('android', 'Android')))\r\n    active = models.BooleanField(default=True)\r\n\r\nclass NewsCategory(models.TextChoices):\r\n    TRAINING_TIPS = 'training', 'Mẹo Luyện Tập'\r\n    NUTRITION = 'nutrition', 'Chế Độ Dinh Dưỡng'\r\n    EVENTS = 'events', 'Sự Kiện Thể Thao'\r\n\r\nclass NewFeed(BaseModel):\r\n    title = RichTextField()\r\n    content = models.TextField()\r\n    category = models.CharField(max_length=20, choices=NewsCategory.choices, default=NewsCategory.TRAINING_TIPS)\r\n    image = models.ImageField(upload_to=\"news/%Y/%m\", blank=True, null=True)\r\n    created_by = models.ForeignKey(User, on_delete=models.CASCADE)\r\n\r\n    def __str__(self):\r\n        return self.title\r\n\r\n    class Meta:\r\n        ordering = ['-id']\r\n\r\nclass Interaction(BaseModel):\r\n    user = models.ForeignKey(User, on_delete=models.CASCADE)\r\n    news = models.ForeignKey(NewFeed, on_delete=models.CASCADE)\r\n\r\n    class Meta:\r\n        abstract = True\r\n\r\n\r\nclass Comment(Interaction):\r\n    content = models.CharField(max_length=255)\r\n\r\n    def __str__(self):\r\n        return self.content\r\n\r\n\r\nclass Like(Interaction):\r\n    class Meta:\r\n        unique_together = ('news', 'user')\r\n\r\n\r\nclass Coach(User):\r\n    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sportapp/sports/models.py b/sportapp/sports/models.py
+--- a/sportapp/sports/models.py	(revision addecaa96ec35165427ac64f2314985d3b69ca3b)
++++ b/sportapp/sports/models.py	(date 1748053626154)
+@@ -9,6 +9,7 @@
+     Admin = 'admin'
+     Member = 'member'
+     Employee = 'employee'
++    Coach = 'coach'
+ 
+ class Payment(models.IntegerChoices):
+     Cash_payment = 1, 'Cash'
+@@ -109,7 +110,3 @@
+ class Like(Interaction):
+     class Meta:
+         unique_together = ('news', 'user')
+-
+-
+-class Coach(User):
+-    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+\ No newline at end of file

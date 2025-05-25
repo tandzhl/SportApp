@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="9a99d9b2-1022-43fb-844b-55bef7d7e942" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sportapp/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sportapp/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sportapp/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sportapp/urls.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sportapp/sports/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sports/serializers.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/serializers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sports/static/news/2025/05/Screenshot_2024-12-15_185755.png" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/media/news/2025/05/Screenshot_2024-12-15_185755.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sports/static/news/2025/05/tải_xuống.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/media/news/2025/05/tải_xuống.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sports/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sportapp/sports/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/sportapp/sports/views.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,6 +49,10 @@
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "main",
     "last_opened_file_path": "D:/BTL/BTL_LTHD/Backend/sportapp",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "vue.rearranger.settings.migration": "true"
   }
@@ -62,6 +76,8 @@
       <workItem from="1743253424490" duration="6000" />
       <workItem from="1743322069446" duration="24000" />
       <workItem from="1746372855897" duration="110000" />
+      <workItem from="1748052653951" duration="401000" />
+      <workItem from="1748053063397" duration="1730000" />
     </task>
     <servers />
   </component>
