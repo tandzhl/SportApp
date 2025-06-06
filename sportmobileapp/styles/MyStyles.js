@@ -50,7 +50,7 @@ export default StyleSheet.create({
     }, btn_add: {
         position: "absolute",
         bottom: 20,
-        right: 20,
+        left: 20,
         backgroundColor: "#007bff",
         width: 60,
         height: 60,

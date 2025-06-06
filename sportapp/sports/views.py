@@ -187,6 +187,7 @@ class CommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateA
 class EmployeePermission(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'employee'
+
 from rest_framework import viewsets, permissions, generics, parsers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -205,10 +206,13 @@ class ScheduleViewSet(viewsets.ViewSet):
     serializer_class = ScheduleSerializer
     def get_permissions(self):
         if self.action == 'add_schedule':
-            permission_classes = [IsAuthenticated, perms.IsSportClassOwnedByCoach]
+            # Allow EmployeePermission OR IsSportClassOwnedByCoach
+            permission_classes = [IsAuthenticated, (EmployeePermission | perms.IsSportClassOwnedByCoach)]
         elif self.action in ['update_schedule', 'delete_schedule']:
-            permission_classes = [IsAuthenticated, perms.IsCoachOfScheduleSportClass]
+            # Allow EmployeePermission OR IsCoachOfScheduleSportClass
+            permission_classes = [IsAuthenticated, (EmployeePermission | perms.IsCoachOfScheduleSportClass)]
         else:
+            # Default for other actions (e.g., list)
             permission_classes = [IsAuthenticated, EmployeePermission]
         return [permission() for permission in permission_classes]
 
@@ -217,7 +221,7 @@ class ScheduleViewSet(viewsets.ViewSet):
         serializer = ScheduleSerializer(schedules, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(methods=['post'], detail=False, url_path='add')
+    @action(methods=['post'], detail=False, url_path='add', permission_classes=[EmployeePermission])
     def add_schedule(self, request):
         try:
             new_datetime_str = request.data.get('datetime')
@@ -540,9 +544,6 @@ class JoinedSportClassViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = MemberJoinClass.objects.filter(active=True)
     serializer_class = JoinedSportClassSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = LimitOffsetPagination
-    parser_classes = [parsers.MultiPartParser]
-
 
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)

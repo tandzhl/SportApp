@@ -26,6 +26,14 @@ import ManageUsersScreen from "./components/Admin/UserManager";
 import ManageAccount from "./components/Admin/ManageAccount";
 import PayOrder from "./components/Home/PayOrder";
 import UserClasses from "./components/Home/UserClasses";
+import NewfeedScreen from "./components/User/NewfeedScreen";
+import NewsDetailScreen from "./components/User/NewsDetailScreen";
+import AdminStatsScreen from "./components/Admin/AdminStatsScreen"
+import EmployeeScreen from "./components/Employee/EmployeeScreen";
+import CheckOrderScreen from "./components/Employee/CheckOrderScreen";
+import AddScheduleScreen from "./components/Employee/AddScheduleScreen";
+import PushNotificationScreen from "./components/Employee/PushNotificationScreen";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const Stack = createNativeStackNavigator();
 const StackNavigator = () => {
@@ -51,9 +59,12 @@ const TabNavigator = () => {
       <> 
         {user.role === "coach" && (<Tab.Screen name="Coach" component={Coach} options={{ title: "Huấn luyện viên", tabBarIcon: () => <Icon size={30} source="whistle" /> }}/>)}
         {user.role === "admin" && (<Tab.Screen name="Admin" component={Admin} options={{ title: "Quản trị viên", tabBarIcon: () => <Icon size={30} source="shield-account" /> }}/>)}
+        {user.role === "employee" && (<Tab.Screen name="Employee" component={EmployeeScreen} options={{ title: "Nhân viên", tabBarIcon: () => <Icon size={30} source="shield-account" /> }}/>)}
         <Tab.Screen name="profile" component={Profile} options={{title:"Tài khoản", tabBarIcon: () => <Icon size={30} source="account" />}}/>
+        <Tab.Screen name="Bảng tin" component={NewfeedScreen} options={{tabBarIcon: () => <Icon size={30} source="post" />}}/>
+        <Tab.Screen name="Khóa học" component={UserClasses} options={{tabBarIcon: () => <Icon size={30} source="notebook-outline" />}}/>
       </>}
-      <Tab.Screen name="Khóa học" component={UserClasses} options={{tabBarIcon: () => <Icon size={30} source="notebook-outline" />}}/>
+      
     </Tab.Navigator>
   );
 }
@@ -74,24 +85,39 @@ const MainStackNavigator = () => {
       <MainStack.Screen name={'user-manager'} component={ManageUsersScreen} />
       <MainStack.Screen name={'manage-account'} component={ManageAccount} />
       <MainStack.Screen name={'pay-order'} component={PayOrder} />
+      <MainStack.Screen name={'newfeed'} component={NewfeedScreen} />
+      <MainStack.Screen name={'newfeed-detail'} component={NewsDetailScreen} />
+      <MainStack.Screen name={'admin-stats'} component={AdminStatsScreen} />
+      <MainStack.Screen name={'employee-stack'} component={EmployeeStack} />
     </MainStack.Navigator>
   );
 }
 
+const EmpStack = createNativeStackNavigator()
+const EmployeeStack = () => (
+  <EmpStack.Navigator initialRouteName="employee-home">
+    <EmpStack.Screen name="employee-home" component={EmployeeScreen} options={{headerShown: false}}/>
+    <EmpStack.Screen name="employee-order" component={CheckOrderScreen} options={{headerShown: false}}/>
+    <EmpStack.Screen name="employee-add-schedule" component={AddScheduleScreen} options={{headerShown: false}} />
+    <EmpStack.Screen name="employee-push-notification" component={PushNotificationScreen} options={{headerShown: false}} />
+  </EmpStack.Navigator>
+);
+
 const App = () => {
   const [user, dispatch] = useReducer(MyUserReducer, null);
-
   return (
     <GestureHandlerRootView>
-      <PaperProvider>
-        <MyUserContext.Provider value={user}>
-          <MyDispatchContext.Provider value={dispatch}>
-            <NavigationContainer>
-              <MainStackNavigator />
-            </NavigationContainer>
-          </MyDispatchContext.Provider>
-        </MyUserContext.Provider>
-      </PaperProvider> 
+      <SafeAreaProvider>
+        <PaperProvider>
+          <MyUserContext.Provider value={user}>
+            <MyDispatchContext.Provider value={dispatch}>
+              <NavigationContainer>
+                <MainStackNavigator />
+              </NavigationContainer>
+            </MyDispatchContext.Provider>
+          </MyUserContext.Provider>
+        </PaperProvider> 
+      </SafeAreaProvider>
     </GestureHandlerRootView>   
   );
 }

@@ -37,7 +37,7 @@ const UpdateSchedule = ({ route, navigation }) => {
             const datetime = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
             const token = await AsyncStorage.getItem("token");
 
-            await authApis(token).patch(endpoints["update-schedule"](schedule.id), {
+            await authApis(token).put(endpoints["update-schedule"](schedule.id), {
                 datetime,
                 place
             });

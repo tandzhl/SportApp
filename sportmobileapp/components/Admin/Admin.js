@@ -17,7 +17,14 @@ const Admin = () => {
           <MaterialCommunityIcons name="account-plus" size={30} color="#E94E77" />
           <Text style={MyStyles.card_label}>Tạo tài khoản</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={MyStyles.card} onPress={() => navigation.navigate('admin-stats')}>
+          <MaterialCommunityIcons name="chart-bar" size={30} color="#E94E77" />
+          <Text style={MyStyles.card_label}>Thống kê báo cáo</Text>
+        </TouchableOpacity>
       </View>
+
+      
     );
 
 };
