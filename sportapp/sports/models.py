@@ -100,7 +100,7 @@ class NewsCategory(models.TextChoices):
     EVENTS = 'events', 'Sự Kiện Thể Thao'
 
     def __str__(self):
-        return self.subject
+        return self.label
 
 class NewFeed(BaseModel):
     title = RichTextField()

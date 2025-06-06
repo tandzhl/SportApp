@@ -43,7 +43,8 @@ class DeviceSerializer(serializers.ModelSerializer):
 class JoinedSportClassSerializer(ModelSerializer):
     class Meta:
         model = MemberJoinClass
-        fields = ['user', 'joining_date', 'sportclass']
+        fields = ['id', 'user', 'joining_date', 'sportclass']
+
 
 class CategorySerializer(ModelSerializer):
     class Meta:
@@ -74,9 +75,17 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'content', 'created_at', 'news']
         extra_kwargs = {
             'news': {
-                'write_only': True
+                'write_only': True, 'required': False
+            },
+            'user': {
+                'write_only': True, 'required': False
             }
         }
+
+    def update(self, instance, validated_data):
+        instance.content = validated_data.get('content', instance.content)
+        instance.save()
+        return instance
 
 
 class NewFeedSerializer(serializers.ModelSerializer):
@@ -108,6 +117,11 @@ class NewFeedDetailSerializer(NewFeedSerializer):
 
 
 class NewFeedCreateSerializer(serializers.ModelSerializer):
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['image'] = instance.image.url if instance.image else ''
+        return data
+
     class Meta:
         model = NewFeed
         fields = ['title', 'content', 'image']
@@ -137,3 +151,8 @@ class OrderSerializer(ModelSerializer):
     class Meta:
         model = Order
         fields = ['id', 'user', 'sportclass', 'is_paid', 'payment', 'price']
+
+class DiscountSerializer(ModelSerializer):
+    class Meta:
+        model = Discount
+        fields = '__all__'

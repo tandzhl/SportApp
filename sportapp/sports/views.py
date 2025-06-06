@@ -3,8 +3,11 @@ from pickle import FALSE
 from django.shortcuts import get_object_or_404
 import pytz
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from sports import serializers
@@ -14,6 +17,14 @@ from sports.services.notification_service import NotificationService
 from rest_framework import viewsets, permissions, generics, parsers, status
 from rest_framework.decorators import action, permission_classes
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from sports import perms, serializers
+from sports.models import Device, User, Schedule, Discount, MemberJoinClass, Notification, NewFeed, Comment, Like, Order
+from sports.serializers import DeviceSerializer, NotificationSerializer, CommentSerializer, NewFeedSerializer, \
+    NewFeedDetailSerializer, ScheduleSerializer, OrderSerializer, UserSerializer
+from sports.services.notification_service import NotificationService
+from rest_framework import status, viewsets, generics, permissions
 from sports import perms, paginator
 from sports.models import Category, SportClass, MemberJoinClass, User, Schedule
 from sports.serializers import CategorySerializer, SportClassSerializer, ScheduleSerializer, JoinedStudentSerializer, UserSerializer, JoinedSportClassSerializer
@@ -146,7 +157,7 @@ class NewFeedViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
             c = u.save()
             return Response(serializers.CommentSerializer(c).data, status=status.HTTP_201_CREATED)
         else:
-            comments = self.get_object().comment_set.select_related('user').filter(active=True)
+            comments = self.get_object().comment_set.select_related('user').filter(active=True).order_by('-created_at')
             page = self.paginate_queryset(comments)
             if page is not None:
                 serializer = serializers.CommentSerializer(page, many=True)
@@ -166,10 +177,23 @@ class CommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateA
     serializer_class = CommentSerializer
     permission_classes = [perms.IsCommentOwner]
 
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)  # Sử dụng partial=True để không yêu cầu tất cả các trường
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
 class EmployeePermission(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'employee'
+from rest_framework import viewsets, permissions, generics, parsers, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from sports import perms, paginator
+
+from sports.models import Category, SportClass, MemberJoinClass, User, Schedule
+from sports.serializers import CategorySerializer, SportClassSerializer, ScheduleSerializer, JoinedStudentSerializer, UserSerializer, JoinedSportClassSerializer
 
 class CategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Category.objects.filter(active=True)
@@ -195,34 +219,80 @@ class ScheduleViewSet(viewsets.ViewSet):
 
     @action(methods=['post'], detail=False, url_path='add')
     def add_schedule(self, request):
-        serializer = ScheduleSerializer(data=request.data)
-        if serializer.is_valid():
-            if serializer.validated_data['datetime'] <= timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh')):
-                return Response({"error": "Schedule cannot be added"}, status=status.HTTP_400_BAD_REQUEST)
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            new_datetime_str = request.data.get('datetime')
+            if not new_datetime_str:
+                return Response({"error": "Datetime is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(methods=['patch'], detail=True, url_path='update')
+            new_datetime = parse_datetime(new_datetime_str)
+            if not new_datetime:
+                return Response({"error": "Invalid datetime format"}, status=status.HTTP_400_BAD_REQUEST)
+
+            local_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+            if new_datetime.tzinfo is None:
+                new_datetime = local_tz.localize(new_datetime)
+            else:
+                new_datetime = new_datetime.astimezone(local_tz)
+
+            current_datetime = timezone.now().astimezone(local_tz)
+            if new_datetime <= current_datetime:
+                return Response({"error": "Schedule cannot be added in the past"}, status=status.HTTP_400_BAD_REQUEST)
+
+            data = request.data.copy()
+            data['datetime'] = new_datetime
+            serializer = ScheduleSerializer(data=data)
+            if serializer.is_valid():
+                with transaction.atomic():
+                    serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response({"error": "Invalid datetime format"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(methods=['put'], detail=True, url_path='update')
     def update_schedule(self, request, pk=None):
         try:
             schedule = Schedule.objects.get(pk=pk)
             current_datetime = timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))
-            if schedule.datetime <= current_datetime:
-                return Response({"error": "Can't update a schedule that has already occurred"}, status=status.HTTP_400_BAD_REQUEST)
+
+            new_datetime_str = request.data.get('datetime')
+            if not new_datetime_str:
+                return Response({"error": "Datetime is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            new_datetime = parse_datetime(new_datetime_str)
+            if not new_datetime:
+                return Response({"error": "Invalid datetime format"}, status=status.HTTP_400_BAD_REQUEST)
+
+            local_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+            if new_datetime.tzinfo is None:
+                new_datetime = local_tz.localize(new_datetime)
+            else:
+                new_datetime = new_datetime.astimezone(local_tz)
+
+            if new_datetime <= current_datetime:
+                return Response({"error": "Can't update a schedule that has already occurred"},
+                               status=status.HTTP_400_BAD_REQUEST)
+
             serializer = ScheduleSerializer(schedule, data=request.data, partial=True)
             if serializer.is_valid():
-                serializer.save()
-                members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
-                notification = Notification.objects.create(
-                    subject="Schedule Updated",
-                    message=f"Schedule for {schedule.sportclass.name} has been updated!",
-                )
-                notification.users.set(members)
+                with transaction.atomic():  # Ensure atomic operation
+                    serializer.save()
+                    members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
+                    notification = Notification.objects.create(
+                        subject="Schedule Updated",
+                        message=f"Schedule for {schedule.sportclass.name} has been updated!",
+                    )
+                    notification.users.set(members)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Schedule.DoesNotExist:
             return Response({"error": "Schedule does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return Response({"error": "Invalid datetime format"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=['delete'], detail=True, url_path='delete')
     def delete_schedule(self, request, pk=None):
@@ -233,8 +303,8 @@ class ScheduleViewSet(viewsets.ViewSet):
                 return Response({"error": "Can't delete a schedule that has already occurred"}, status=status.HTTP_400_BAD_REQUEST)
             members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
             notification = Notification.objects.create(
-                subject="Schedule Updated",
-                message=f"Schedule for {schedule.sportclass.name} has been updated!",
+                subject="Schedule Canceled",
+                message=f"Schedule for {schedule.sportclass.name} has been canceled!",
             )
             notification.users.set(members)
             schedule.delete()
@@ -275,7 +345,7 @@ class OrdersViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
         payment_method = request.data.get("payment")
         if payment_method is not None:
             order.payment = payment_method
-            
+
         order.is_paid = True
         order.save()
 
@@ -321,6 +391,19 @@ class OrdersViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
         orders = orders.order_by('created_at')
         serializer = OrderSerializer(orders, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['patch'], detail=True, url_path='update-paid')
+    def update_paid_status(self, request, pk=None):
+        try:
+            order = Order.objects.get(id=pk, active=True)
+            order.is_paid = True
+            order.save()
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Order.DoesNotExist:
+            return Response({"error": "Order does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class AdminPermission(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -398,7 +481,6 @@ class AdminStatsViewSet(viewsets.ViewSet):
                 {
                     'class_name': item['sportclass__name'],
                     'scheduled': item['scheduled'],
-                    'scheduled': item['scheduled'],
                     'canceled': item['canceled']
                 } for item in schedule_stats
             ] ,
@@ -430,18 +512,16 @@ class SportClassViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return query
 
-    def retrieve(self, request, pk=None):
-        permission_classes = [AllowAny]
-        sportclass = self.get_object()
-        serializer = SportClassSerializer(sportclass)
-        return Response(serializer.data)
-
-
     @action(methods=['get'], url_path='schedules' ,detail=True, permission_classes=[permissions.AllowAny])
     def get_schedules(self, request, pk):
         schedules = self.get_object().schedule_set.filter(active=True)
 
         return Response(ScheduleSerializer(schedules, many=True).data)
+
+    def retrieve(self, request, pk=None):
+        sportclass = self.get_object()
+        serializer = self.get_serializer(sportclass)
+        return Response(serializer.data)
 
     @action(methods=['get'], url_path='coach', detail=True)
     def get_coach(self, request, pk):
@@ -460,6 +540,9 @@ class JoinedSportClassViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = MemberJoinClass.objects.filter(active=True)
     serializer_class = JoinedSportClassSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = LimitOffsetPagination
+    parser_classes = [parsers.MultiPartParser]
+
 
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)
@@ -482,7 +565,6 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
 
             user.save()
             return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
-
         return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='list-users', permission_classes=[perms.IsSuperUser])
@@ -509,6 +591,26 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
             return Response(UserSerializer(u).data)
         else:
             return Response(UserSerializer(request.user).data)
+
+    @action(detail=False, methods=['get'], url_path='by-role', permission_classes=[permissions.IsAuthenticated])
+    def get_user_by_role(self, request):
+        role = request.query_params.get('role')
+        if not role:
+            return Response({'error': 'Role is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = self.queryset.filter(role=role)
+
+        q = request.query_params.get('username')
+        if q:
+            users = users.filter(username__icontains=q)
+
+        paginator = LimitOffsetPagination()
+        users = paginator.paginate_queryset(users, request)
+        serializer = UserSerializer(users, many=True)
+
+        return  paginator.get_paginated_response(serializer.data)
+
+
 
     @action(detail=True, methods=['get'], url_path='sportclasses')
     def sportclass(self, request, pk=None):

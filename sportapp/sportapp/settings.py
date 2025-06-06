@@ -60,7 +60,7 @@ REST_FRAMEWORK = {
         'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 2, # Đặt mặc định là 20 bình luận mỗi lần
+    'PAGE_SIZE': 5, # Đặt mặc định là 20 bình luận mỗi lần
 
 }
 
@@ -129,7 +129,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'sportdb',
         'USER': 'root',
-        'PASSWORD': 'Admin@123',
+        'PASSWORD': 'Abc@123',
         'HOST': 'localhost',
         'PORT': '3306',
         'OPTIONS': {
