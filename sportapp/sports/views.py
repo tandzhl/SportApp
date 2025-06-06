@@ -1,19 +1,23 @@
-from datetime import timedelta, date, datetime
-
+from datetime import timedelta, datetime
+from pickle import FALSE
+from django.shortcuts import get_object_or_404
 import pytz
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
-from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from sports import perms, serializers
-from sports.models import Device, User, Schedule, Discount, MemberJoinClass, Notification, NewFeed, Comment, Like, Order
-from sports.serializers import DeviceSerializer, NotificationSerializer, CommentSerializer, NewFeedSerializer, \
-    NewFeedDetailSerializer, ScheduleSerializer, OrderSerializer, UserSerializer
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from sports import serializers
+from sports.models import Device, Discount, Notification, NewFeed, Comment, Like, Order
+from sports.serializers import DeviceSerializer, NotificationSerializer, CommentSerializer, OrderSerializer
 from sports.services.notification_service import NotificationService
-from rest_framework import status, viewsets, generics, permissions
+from rest_framework import viewsets, permissions, generics, parsers, status
+from rest_framework.decorators import action, permission_classes
+from rest_framework.response import Response
+from sports import perms, paginator
+from sports.models import Category, SportClass, MemberJoinClass, User, Schedule
+from sports.serializers import CategorySerializer, SportClassSerializer, ScheduleSerializer, JoinedStudentSerializer, UserSerializer, JoinedSportClassSerializer
+
 
 class DeviceViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -166,20 +170,23 @@ class CommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateA
 class EmployeePermission(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'employee'
-from rest_framework import viewsets, permissions, generics, parsers, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from sports import perms, paginator
-
-from sports.models import Category, SportClass, MemberJoinClass, User, Schedule
-from sports.serializers import CategorySerializer, SportClassSerializer, ScheduleSerializer, JoinedStudentSerializer, UserSerializer, JoinedSportClassSerializer
 
 class CategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Category.objects.filter(active=True)
     serializer_class = CategorySerializer
+    pagination_class = None
 
 class ScheduleViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated, EmployeePermission]
+    queryset = Schedule.objects.filter(active=True)
+    serializer_class = ScheduleSerializer
+    def get_permissions(self):
+        if self.action == 'add_schedule':
+            permission_classes = [IsAuthenticated, perms.IsSportClassOwnedByCoach]
+        elif self.action in ['update_schedule', 'delete_schedule']:
+            permission_classes = [IsAuthenticated, perms.IsCoachOfScheduleSportClass]
+        else:
+            permission_classes = [IsAuthenticated, EmployeePermission]
+        return [permission() for permission in permission_classes]
 
     def list(self, request):
         schedules = Schedule.objects.all()
@@ -196,7 +203,7 @@ class ScheduleViewSet(viewsets.ViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(methods=['put'], detail=True, url_path='update')
+    @action(methods=['patch'], detail=True, url_path='update')
     def update_schedule(self, request, pk=None):
         try:
             schedule = Schedule.objects.get(pk=pk)
@@ -207,11 +214,11 @@ class ScheduleViewSet(viewsets.ViewSet):
             if serializer.is_valid():
                 serializer.save()
                 members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
-                Notification.objects.create(
+                notification = Notification.objects.create(
                     subject="Schedule Updated",
                     message=f"Schedule for {schedule.sportclass.name} has been updated!",
-                    users = members,
                 )
+                notification.users.set(members)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Schedule.DoesNotExist:
@@ -225,22 +232,93 @@ class ScheduleViewSet(viewsets.ViewSet):
             if schedule.datetime <= current_datetime:
                 return Response({"error": "Can't delete a schedule that has already occurred"}, status=status.HTTP_400_BAD_REQUEST)
             members = MemberJoinClass.objects.filter(sportclass=schedule.sportclass).values_list('user', flat=True)
-            Notification.objects.create(
-                subject="Schedule Canceled",
-                message=f"Schedule for {schedule.sportclass.name} has been canceled!",
-                users = members,
+            notification = Notification.objects.create(
+                subject="Schedule Updated",
+                message=f"Schedule for {schedule.sportclass.name} has been updated!",
             )
+            notification.users.set(members)
             schedule.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Schedule.DoesNotExist:
             return Response({"error": "Schedule does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
-class OrdersViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated, EmployeePermission]
+class OrdersViewSet(viewsets.ViewSet, generics.RetrieveAPIView):
+    queryset = Order.objects.filter(active=True)
+    serializer_class = OrderSerializer
+
+    def get_permissions(self):
+        if self.action == 'retrieve':
+            permission_classes = [IsAuthenticated, perms.IsOrderOwner]
+        elif self.action == 'list_orders':
+            permission_classes = [IsAuthenticated, EmployeePermission]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
+
+    @action(methods=['post'], detail=True, url_path='pay')
+    def pay_order(self, request, pk=None):
+        order = get_object_or_404(Order, pk=pk)
+
+        # Kiểm tra người dùng hiện tại có phải chủ sở hữu đơn hàng không
+        if order.user != request.user:
+            return Response(
+                {"detail": "Bạn không có quyền thanh toán đơn hàng này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if order.is_paid:
+            return Response(
+                {"detail": "Đơn hàng đã được thanh toán."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        payment_method = request.data.get("payment")
+        if payment_method is not None:
+            order.payment = payment_method
+            
+        order.is_paid = True
+        order.save()
+
+        return Response(
+            {"detail": "Thanh toán thành công."},
+            status=status.HTTP_200_OK
+        )
+
+    @action(methods=['post'], detail=False ,url_path='add')
+    def create_orders(self, request):
+        try:
+            user_id = request.data.get('user')
+            sportclass_id = request.data.get('sportclass')
+            price = request.data.get('price', 0.0)
+            payment = request.data.get('payment', 0)
+
+            if not user_id or not sportclass_id:
+                return Response({"error": "Missing user or sportclass."}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = get_object_or_404(User, pk=user_id)
+            sportclass = get_object_or_404(SportClass, pk=sportclass_id)
+
+            order = Order.objects.create(
+                user=user,
+                sportclass=sportclass,
+                price=price,
+                payment=payment
+            )
+
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     @action(methods=['get'], detail=False)
     def list_orders(self, request):
-        orders = Order.objects.filter(is_paid=False, active=True).order_by('-created_at')
+        user_id = request.query_params.get('user_id')
+        orders = Order.objects.filter(active=True).select_related('sportclass')
+        if user_id:
+            orders = orders.filter(user_id=user_id)
+        orders = orders.order_by('created_at')
         serializer = OrderSerializer(orders, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -320,6 +398,7 @@ class AdminStatsViewSet(viewsets.ViewSet):
                 {
                     'class_name': item['sportclass__name'],
                     'scheduled': item['scheduled'],
+                    'scheduled': item['scheduled'],
                     'canceled': item['canceled']
                 } for item in schedule_stats
             ] ,
@@ -351,6 +430,13 @@ class SportClassViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return query
 
+    def retrieve(self, request, pk=None):
+        permission_classes = [AllowAny]
+        sportclass = self.get_object()
+        serializer = SportClassSerializer(sportclass)
+        return Response(serializer.data)
+
+
     @action(methods=['get'], url_path='schedules' ,detail=True, permission_classes=[permissions.AllowAny])
     def get_schedules(self, request, pk):
         schedules = self.get_object().schedule_set.filter(active=True)
@@ -378,12 +464,32 @@ class JoinedSportClassViewSet(viewsets.ViewSet, generics.CreateAPIView):
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
-    # permission_classes = [perms.IsScheduleOwnedByCoach]
 
-    @action(detail=False, methods=['get'], url_path='current-user')
-    def get_current_user(self, request):
-        return Response(serializers.UserSerializer(request.user).data)
-    parser_classes = [parsers.MultiPartParser]
+    @action(methods=['get', 'patch'], url_path="admin-manage", detail=True,
+            permission_classes=[perms.IsSuperUser])
+    def admin_manage(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == "PATCH":
+            for key in request.data:
+                if key in ['first_name', 'last_name', 'email', 'username', 'role']:
+                    setattr(user, key, request.data[key])
+                elif key == 'avatar' and 'avatar' in request.FILES:
+                    user.avatar = request.FILES['avatar']
+
+            user.save()
+            return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+
+        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='list-users', permission_classes=[perms.IsSuperUser])
+    def list_user(self, request):
+        users = User.objects.filter(is_active=True)
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['get', 'patch'], url_path="current-user", detail=False,
             permission_classes=[permissions.IsAuthenticated])
@@ -392,12 +498,29 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
             u = request.user
 
             for key in request.data:
-                if key in ['first_name', 'last_name']:
+                if key in ['first_name', 'last_name', 'email']:
                     setattr(u, key, request.data[key])
                 elif key.__eq__('password'):
                     u.set_password(request.data[key])
+                elif key.__eq__('avatar') and 'avatar' in request.FILES:
+                    setattr(u, key, request.data[key])
 
             u.save()
             return Response(UserSerializer(u).data)
         else:
             return Response(UserSerializer(request.user).data)
+
+    @action(detail=True, methods=['get'], url_path='sportclasses')
+    def sportclass(self, request, pk=None):
+        user = self.get_object()
+        sport_classes = SportClass.objects.filter(coach=user)
+
+        return Response(SportClassSerializer(sport_classes, many=True).data)
+
+    @action(methods=['get'], url_path='registed-classes', detail=True, permission_classes=[IsAuthenticated])
+    def get_registed_classes(self, request, pk=None):
+        user = self.get_object()
+        sportclasses = SportClass.objects.filter(memberjoinclass__user=user, memberjoinclass__active=True).distinct()
+        serializer = SportClassSerializer(sportclasses, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

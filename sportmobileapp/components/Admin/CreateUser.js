@@ -5,8 +5,16 @@ import { useState } from "react";
 import * as ImagePicker from 'expo-image-picker';
 import Apis, { endpoints } from "../../configs/Apis";
 import { useNavigation } from "@react-navigation/native";
+import RNPickerSelect from "react-native-picker-select";
 
-const Register = () => {
+const CreateUser = () => {
+    const roles = [
+        { label: 'Member', value: 'member' },
+        { label: 'Admin', value: 'admin' },
+        { label: 'Coach', value: 'coach' },
+        { label: 'Employee', value: 'employee' },   
+    ];
+
     const info = [{
         label: "Tên",
         field: "first_name",
@@ -76,6 +84,9 @@ const Register = () => {
         if (validate() === true) {
             try {
                 setLoading(true);
+
+                const roleToUse = user.role || 'member';
+                
                 let form = new FormData();
                 for (let key in user)
                     if (key !== 'confirm') {
@@ -89,13 +100,17 @@ const Register = () => {
                             form.append(key, user[key]);
                     }
 
+                form.append("role", roleToUse);
+
                 await Apis.post(endpoints['register'], form, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         'Accept': 'application/json'
                     }
                 });
-                nav.navigate("login")
+                nav.navigate("Tabs", {
+                    screen: "Trang chủ"
+                })
             } catch(ex) {
                 console.error(ex);
             } finally {
@@ -104,7 +119,7 @@ const Register = () => {
         }
     }
 
-    return (
+    return(
         <ScrollView style={MyStyles.container}>
             <View style={MyStyles.center}>
             {user.avatar && <Image source={{uri: user.avatar.uri}} style={MyStyles.reg_avatar} />}
@@ -116,12 +131,33 @@ const Register = () => {
                                     label={i.label} key={`${i.label}${i.field}`} 
                                     secureTextEntry={i.secureTextEntry}
                                     right={<TextInput.Icon icon={i.icon} />}/>)}
+
+            <Text style={{ marginTop: 20, marginBottom: 10, fontSize: 16 }}>
+                Chọn vai trò người dùng:
+            </Text>
+
+            <RNPickerSelect
+                onValueChange={(value) => setState(value, "role")}
+                items={roles}
+                value={user.role}
+                placeholder={{ label: "Chọn vai trò...", value: null }}
+                style={{
+                    inputAndroid: {
+                        padding: 5,
+                        backgroundColor: "white",
+                        borderRadius: 4,
+                        fontSize: 16,
+                    }
+                }}
+            />
+
             <TouchableOpacity style={MyStyles.m} onPress={pick}>
                 <Text>Chọn ảnh đại diện... </Text>
             </TouchableOpacity>
+            
             <Button onPress={register} disabled={loading} loading={loading} mode="contained" style={MyStyles.m}>Đăng ký</Button>
         </ScrollView>
     );
 }
 
-export default Register;
+export default CreateUser;

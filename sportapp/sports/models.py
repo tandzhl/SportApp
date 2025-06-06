@@ -60,12 +60,18 @@ class MemberJoinClass(BaseModel):
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
     joining_date = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ('sportclass', 'user')
+
 class Order(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     sportclass = models.ForeignKey(SportClass, on_delete=models.CASCADE)
     price = models.FloatField(default=0.0) #dam bao khong am
     is_paid = models.BooleanField(default=False)
     payment = models.IntegerField(choices=Payment, default=Payment.Cash_payment)
+
+    class Meta:
+        unique_together = ('sportclass', 'user')
 
 class Discount(BaseModel):
     name = models.CharField(max_length=100, unique=True) #unique

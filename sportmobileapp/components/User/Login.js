@@ -1,7 +1,7 @@
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native"
+import { Image, ScrollView } from "react-native"
 import MyStyles from "../../styles/MyStyles"
 import { Button, HelperText, TextInput } from "react-native-paper";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Apis, { authApis, endpoints } from "../../configs/Apis";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -51,23 +51,13 @@ const Login = () => {
         if (validate() === true) {
             try {
                 setLoading(true);
-                let res = await Apis.post(
-                    endpoints['login'],
-                    qs.stringify({
-                        ...user,
-                        client_id: 'ECLo4HoBDiJS7ivy1GxA1FyjpKuRmoXXISVCXYuG',
-                        client_secret: 'X1I2yJogVJmSMYsDtuGH9lVHDRkgQ7qpwa2iQFXrBgXmqvijli0d1INvIEg55391oIGFJnL4f4ckYZEF9WnQYnLAhwLlVm1qzlNTJ3zvxmMa4aUSyojs0r5wXhR2czbj',
-                        grant_type: 'password'
-                    }),
-                    {
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        }
-                    }
-                );
-                await AsyncStorage.setItem('token', res.data.access_token);
-                let u = await authApis(res.data.access_token).get(endpoints['current-user']);
-
+                let res = await Apis.post(endpoints['login'], {
+                    username: user.username,
+                    password: user.password
+                });
+                
+                await AsyncStorage.setItem('token', res.data.access);  // JWT token
+                let u = await authApis(res.data.access).get(endpoints['current-user']);
                 dispatch({
                     "type": "login",
                     "payload": u.data
@@ -89,11 +79,12 @@ const Login = () => {
         }
     }
 
+    if (!user) {
+        return <Text>Đang tải...</Text>; // hoặc null
+    }
+
     return (
         <ScrollView>
-            <HelperText type="error" visible={msg}>
-                {msg}
-            </HelperText>
             
             {info.map(i =>  <TextInput key={i.field} style={MyStyles.m}
                                 label={i.label}
