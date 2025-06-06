@@ -19,7 +19,7 @@ class UserSerializer(ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'password', 'email', 'first_name', 'last_name', 'role', 'avatar']
+        fields = ['id', 'username', 'password', 'email', 'first_name', 'last_name', 'role', 'avatar']
         extra_kwargs = {'password': {'write_only': True}}
 
 
@@ -44,7 +44,6 @@ class JoinedSportClassSerializer(ModelSerializer):
     class Meta:
         model = MemberJoinClass
         fields = ['user', 'joining_date', 'sportclass']
-
 
 class CategorySerializer(ModelSerializer):
     class Meta:
@@ -129,4 +128,12 @@ class ScheduleSerializer(ModelSerializer):
         fields = ['id', 'datetime', 'sportclass', 'place']
 
 class OrderSerializer(ModelSerializer):
-    pass
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['user'] = UserSerializer(instance.user).data
+        data['sportclass'] = SportClassSerializer(instance.sportclass).data
+        return data
+
+    class Meta:
+        model = Order
+        fields = ['id', 'user', 'sportclass', 'is_paid', 'payment', 'price']

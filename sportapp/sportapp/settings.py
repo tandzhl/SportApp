@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-w5nbyi0=y$@927cb)cl90mfpq-tm!!fp7@n*q+8w9*o)s-sp&d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['*', '192.168.10.114']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
@@ -129,7 +129,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'sportdb',
         'USER': 'root',
-        'PASSWORD': 'Abc@123',
+        'PASSWORD': 'Admin@123',
         'HOST': 'localhost',
         'PORT': '3306',
         'OPTIONS': {
