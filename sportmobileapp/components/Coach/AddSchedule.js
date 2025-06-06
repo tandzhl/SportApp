@@ -4,9 +4,11 @@ import { useState } from "react";
 import ModalStyles from "../../styles/ModalStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApis, endpoints } from "../../configs/Apis";
+import { useNavigation } from "@react-navigation/native";
 
-const AddSchedule = ({ route, navigation }) => {
+const AddSchedule = ({ route }) => {
   const { classId, reload } = route.params;
+  const navigation = useNavigation();
   const [scheduleData, setScheduleData] = useState({
     day: "",
     month: "",
@@ -22,7 +24,7 @@ const AddSchedule = ({ route, navigation }) => {
         console.log("📦 API URL:", endpoints["add-schedule"]);
         const { day, month, year, hour, minute, second, place } = scheduleData;
         const datetime = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
-        const token = await AsyncStorage.getItem("token");
+        const token = await AsyncStorage.getItem("token");    
         await authApis(token).post(endpoints["add-schedule"], {
             datetime,
             sportclass: classId,
@@ -54,7 +56,7 @@ const AddSchedule = ({ route, navigation }) => {
         <TouchableOpacity onPress={handleAdd} style={ModalStyles.saveButton}>
           <Text style={ModalStyles.buttonText}>Lưu</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={ModalStyles.cancelButton}>
+        <TouchableOpacity onPress={() => navigation.navigate('schedules-manager')} style={ModalStyles.cancelButton}>
           <Text style={ModalStyles.buttonText}>Hủy</Text>
         </TouchableOpacity>
       </View>

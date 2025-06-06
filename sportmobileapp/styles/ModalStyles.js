@@ -60,5 +60,5 @@ export default StyleSheet.create({
     color: "blue",
     marginTop: 10,
     marginBottom: 10,
-  }
+  }, 
 });

@@ -4,6 +4,7 @@ import MyStyles from "../../styles/MyStyles";
 
 const RegistedClasses = () => {
     
+
     return(
         <View>
             <Text style={MyStyles.label}>Các khóa học bạn đã đăng ký:</Text>
