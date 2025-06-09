@@ -11,7 +11,7 @@ const UserClasses = ({ onCoursesPress, onInvoicesPress }) => {
       </TouchableOpacity>
 
       <TouchableOpacity style={MyStyles.card} onPress={onInvoicesPress}>
-        <MaterialCommunityIcons name="file-document-alert" size={30} color="#E94E77" />
+        <MaterialCommunityIcons name="file-alert-outline" size={30} color="#E94E77" />
         <Text style={MyStyles.card_label}>Hóa đơn chưa thanh toán</Text>
       </TouchableOpacity>
     </View>

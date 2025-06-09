@@ -27,7 +27,8 @@ const SchedulesManager = ({route}) => {
         try {
             setLoading(true);
             const token = await AsyncStorage.getItem("token");
-            const res = await authApis(token).get(endpoints.schedules(classId));
+            
+            const res = await authApis(token).get(endpoints['schedules-of-class'](classId));
             
             setSchedules(res.data);
         } catch (error) {
@@ -91,7 +92,6 @@ const SchedulesManager = ({route}) => {
                     onPress: async () => {
                         try {
                             const token = await AsyncStorage.getItem("token");
-                            console.log(id);
                             await authApis(token).delete(endpoints['delete-schedule'](id));
                             loadSchedules(); // reload lại danh sách sau khi xóa
                         } catch (error) {
