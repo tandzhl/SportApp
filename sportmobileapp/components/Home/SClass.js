@@ -11,13 +11,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const SClass = ({route}) => {
     const sportclassId = route.params?.sportclassId;
     const [user, setUser] = useState(null);
-    const [schedules, setSchedules] = useState([]);
     const [loading, setLoading] = useState(false);
     const [sportclass, setSportclass] = useState(null);
     const { width } = useWindowDimensions();
     const navigation = useNavigation();
-
-    console.log(user);
 
     const loadData = async () => {
         try{
@@ -25,9 +22,6 @@ const SClass = ({route}) => {
 
             let classRes = await Apis.get(endpoints['sportclass-detail'](sportclassId));
             setSportclass(classRes.data);
-
-            let res = await Apis.get(endpoints['schedules'](sportclassId));
-            setSchedules(res.data)
 
             const token = await AsyncStorage.getItem('token');
             
@@ -74,18 +68,6 @@ const SClass = ({route}) => {
         loadData();
     }, [sportclassId]);
 
-    const renderItem = ({ item }) => {
-        const dateStr = new Date(item.datetime).toLocaleString("vi-VN");
-
-        return (
-            <List.Item
-                title={dateStr}
-                description={`Địa điểm: ${item.place}`}
-                descriptionNumberOfLines={2}
-                left={props => <List.Icon {...props} icon="calendar" />} />
-        );
-    };
-
     const coach = () => {
         navigation.navigate("coach-profile", {
             coachId: sportclass.coach.id,
@@ -110,18 +92,28 @@ const SClass = ({route}) => {
             </Text>
             </TouchableOpacity>
         </Text>
-        
-
-        <Text style={MyStyles.txt}>Lịch học</Text>
+        <TouchableOpacity
+            onPress={() =>
+                navigation.navigate("schedule-calendar", {
+                classId: sportclass.id,
+                })
+            }
+            style={{ flexDirection: "row", alignItems: "center", marginVertical: 16 }}
+            >
+            <List.Icon icon="calendar" />
+            <Text style={[MyStyles.txt, { color: "blue", textDecorationLine: "underline" }]}>
+                Xem lịch học
+            </Text>
+        </TouchableOpacity>
         </>
     );
 
     const ListFooter = () => (
         <View style={{ paddingVertical: 16 }}>
-        <Text style={MyStyles.txt}>Giá đăng ký khóa học: {sportclass.price}đ</Text>
-        <Button icon="school" mode="contained" style={{ marginTop: 8 }} onPress={register}>
-            Đăng ký
-        </Button>
+            <Text style={MyStyles.txt}>Giá đăng ký khóa học: {sportclass.price}đ</Text>
+            <Button icon="school" mode="contained" style={{ marginTop: 8 }} onPress={register}>
+                Đăng ký
+            </Button>
         </View>
     );
 
@@ -132,9 +124,7 @@ const SClass = ({route}) => {
     return (
         <FlatList
         style={MyStyles.container}
-        data={schedules}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ListFooterComponent={ListFooter}
         ListEmptyComponent={<Text>Không có lịch học nào.</Text>}

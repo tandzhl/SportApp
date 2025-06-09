@@ -34,6 +34,9 @@ import CheckOrderScreen from "./components/Employee/CheckOrderScreen";
 import AddScheduleScreen from "./components/Employee/AddScheduleScreen";
 import PushNotificationScreen from "./components/Employee/PushNotificationScreen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import RegistedClasses from "./components/Home/RegistedClasses";
+import UnpaidOrders from "./components/Home/UnpaidOrders";
+import ScheduleCalendar from "./components/Home/ScheduleCalendar";
 
 const Stack = createNativeStackNavigator();
 const StackNavigator = () => {
@@ -89,6 +92,9 @@ const MainStackNavigator = () => {
       <MainStack.Screen name={'newfeed-detail'} component={NewsDetailScreen} />
       <MainStack.Screen name={'admin-stats'} component={AdminStatsScreen} />
       <MainStack.Screen name={'employee-stack'} component={EmployeeStack} />
+      <MainStack.Screen name={'registed-classes'} component={RegistedClasses} />
+      <MainStack.Screen name={'unpaid-orders'} component={UnpaidOrders} />
+      <MainStack.Screen name={'schedule-calendar'} component={ScheduleCalendar} />
     </MainStack.Navigator>
   );
 }
